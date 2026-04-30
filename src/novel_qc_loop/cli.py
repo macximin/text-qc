@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .intake import intake_inbox, intake_manuscript
 from .workspace import (
     build_portfolio_status,
     create_run,
@@ -17,6 +18,10 @@ from .workspace import (
 
 def _workspace_root(value: str) -> Path:
     return Path(value).expanduser().resolve()
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
 
 
 def cmd_init_work(args: argparse.Namespace) -> int:
@@ -46,6 +51,39 @@ def cmd_start_run(args: argparse.Namespace) -> int:
         notes=args.note or [],
     )
     print(f"created run: {run_root}")
+    return 0
+
+
+def cmd_intake(args: argparse.Namespace) -> int:
+    result = intake_manuscript(
+        input_path=Path(args.input),
+        workspace_root=_workspace_root(args.workspace),
+        templates_root=Path(args.templates).resolve(),
+        mode=args.mode,
+        title=args.title,
+        slug=args.slug,
+        author=args.author,
+        genre=args.genre,
+        audience=args.audience,
+        platform=args.platform,
+        source_note=args.note or "",
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_intake_inbox(args: argparse.Namespace) -> int:
+    results = intake_inbox(
+        inbox_root=Path(args.inbox).resolve(),
+        workspace_root=_workspace_root(args.workspace),
+        templates_root=Path(args.templates).resolve(),
+        mode=args.mode,
+        genre=args.genre,
+        audience=args.audience,
+        platform=args.platform,
+    )
+    payload = {"count": len(results), "items": [result.to_dict() for result in results]}
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -166,6 +204,30 @@ def build_parser() -> argparse.ArgumentParser:
     start_run.add_argument("--source", default="")
     start_run.add_argument("--note", action="append")
     start_run.set_defaults(func=cmd_start_run)
+
+    intake = subparsers.add_parser("intake", help="ingest one manuscript and create a harness run")
+    intake.add_argument("--input", required=True)
+    intake.add_argument("--workspace", default="workspace")
+    intake.add_argument("--templates", default=str(_repo_root() / "templates"))
+    intake.add_argument("--mode", default="full", choices=["audit", "correction", "full", "검수", "교정", "전체"])
+    intake.add_argument("--title", default="")
+    intake.add_argument("--slug", default="")
+    intake.add_argument("--author", default="")
+    intake.add_argument("--genre", default="")
+    intake.add_argument("--audience", default="")
+    intake.add_argument("--platform", default="")
+    intake.add_argument("--note", default="")
+    intake.set_defaults(func=cmd_intake)
+
+    intake_box = subparsers.add_parser("intake-inbox", help="ingest all supported files in an inbox")
+    intake_box.add_argument("--inbox", default="inbox/initial_manuscripts")
+    intake_box.add_argument("--workspace", default="workspace")
+    intake_box.add_argument("--templates", default=str(_repo_root() / "templates"))
+    intake_box.add_argument("--mode", default="full", choices=["audit", "correction", "full", "검수", "교정", "전체"])
+    intake_box.add_argument("--genre", default="")
+    intake_box.add_argument("--audience", default="")
+    intake_box.add_argument("--platform", default="")
+    intake_box.set_defaults(func=cmd_intake_inbox)
 
     list_works = subparsers.add_parser("list-works", help="list works in the workspace")
     list_works.add_argument("--workspace", default="workspace")

@@ -18,6 +18,18 @@
 
 추출 텍스트는 `workspace/{work}/extracted`에 저장합니다.
 
+권장 방식은 intake harness입니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full
+```
+
+초기 원고함 일괄 처리:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full
+```
+
 ## 2. 1차 전역 감리
 
 목표는 빠르게 치명상을 찾는 것입니다.
@@ -72,4 +84,3 @@ Pass 3: AI 티/문체
 필요에 따라 Markdown, HTML, PDF, HWPX를 생성합니다.
 
 HWPX 교정 표시가 필요하면 `scripts/apply_blue.py`를 사용합니다.
-

@@ -16,6 +16,7 @@
 ```powershell
 cd C:\Users\wjjo\Desktop\novel-qc-loop
 $env:PYTHONPATH = ".\src"
+python -m novel_qc_loop intake --input "C:\path\to\manuscript.txt" --mode full --genre "현대판타지" --audience "3040"
 python -m novel_qc_loop init-work --slug canaria --title "카나리아" --genre "현대판타지" --audience "3040" --platform "네이버 시리즈"
 python -m novel_qc_loop start-run --work canaria --kind global-audit
 python -m novel_qc_loop list-works
@@ -27,6 +28,7 @@ python -m novel_qc_loop inspect-text --input "C:\path\to\manuscript.txt"
 
 ```text
 docs/                 운영 문서
+inbox/                초기 원고함, git ignore
 templates/            보고서/감리/교정 템플릿
 schemas/              manifest/issue/report JSON schema
 scripts/              현장 실행용 얇은 래퍼와 HWPX 도구
@@ -54,6 +56,22 @@ workspace/canaria/
 
 `manifest.json`에는 작품 제목, 장르, 대상 독자, 플랫폼, 원본 위치, 운영 메모를 둡니다. 원고 본문은 manifest에 넣지 않습니다.
 
+## Intake Harness
+
+가장 쉬운 흐름은 `inbox/initial_manuscripts/`에 원고를 넣고 intake를 돌리는 것입니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full
+```
+
+하네스는 제목을 유추하고, 작품 폴더와 run 폴더를 만들고, 다음 산출물을 자동 생성합니다.
+
+- `llm-facing/task_brief.md`
+- `llm-facing/handoff_checklist.md`
+- `human-facing/one_page_report.md`
+- `final_manuscript/final_manuscript.txt`
+- `evidence/inspection.json`
+
 ## 핵심 원칙
 
 - 원본 원고는 보존한다.
@@ -69,6 +87,7 @@ workspace/canaria/
 추천 문서:
 
 - `docs/ide_first_operating_model.md`
+- `docs/intake_harness.md`
 - `docs/repeatable_multi_work_loop.md`
 - `docs/promotion_polish.md`
 

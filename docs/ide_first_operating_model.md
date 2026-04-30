@@ -18,11 +18,12 @@
 
 사용자는 repo를 열고 다음 세 가지를 반복하면 됩니다.
 
-1. 작품 등록
-2. run 생성
+1. 초기 원고함에 파일 투입
+2. intake harness 실행
 3. 에이전트에게 run 폴더를 기준으로 검수/교정/보고서 생성을 맡김
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 .\scripts\novel-qc-loop.ps1 list-works
 .\scripts\novel-qc-loop.ps1 start-run --work canaria --kind adversarial-audit
 .\scripts\novel-qc-loop.ps1 portfolio-status
@@ -83,4 +84,3 @@ portfolio-status를 보고 pending run이 있는 작품부터 처리해.
 - 여러 작품의 pending 상태가 한 명령으로 보인다.
 - 어떤 AI 모델을 쓰든 작업 산출물이 같은 manifest/schema에 맞춰 남는다.
 - 팀원이 IDE로 repo를 열면 현재 어디까지 왔는지 이해할 수 있다.
-

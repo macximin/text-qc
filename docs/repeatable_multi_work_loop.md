@@ -2,6 +2,18 @@
 
 ## 핵심 명령
 
+초기 원고함 일괄 intake:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full
+```
+
+단일 원고 intake:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full
+```
+
 작품 목록:
 
 ```powershell
@@ -78,4 +90,3 @@
 - 문제에 근거를 붙였는가
 - 내부 감리와 human-facing 보고서를 분리했는가
 - 다음 run이 이어받을 수 있게 상태를 남겼는가
-

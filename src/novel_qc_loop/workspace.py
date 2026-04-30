@@ -10,6 +10,16 @@ from .models import RunManifest, TextInspection, WorkManifest
 
 
 WORK_SUBDIRS = ("inputs", "extracted", "runs", "reports", "corrections", "exports", "archive")
+RUN_SUBDIRS = (
+    "evidence",
+    "llm-facing",
+    "human-facing",
+    "draft_reports",
+    "final_reports",
+    "corrections",
+    "final_manuscript",
+    "exports",
+)
 
 
 def safe_slug(value: str) -> str:
@@ -166,7 +176,7 @@ def create_run(
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "__" + safe_slug(kind)
     run_root = work_root / "runs" / run_id
     run_root.mkdir(parents=True, exist_ok=False)
-    for subdir in ("evidence", "draft_reports", "final_reports", "exports"):
+    for subdir in RUN_SUBDIRS:
         (run_root / subdir).mkdir(exist_ok=True)
 
     run_manifest = RunManifest(
@@ -176,11 +186,13 @@ def create_run(
         source_text_path=source_text_path,
         notes=list(notes or []),
         stages={
-            "01_global_audit": "pending",
-            "02_adversarial_audit": "pending",
-            "03_correction_plan": "pending",
-            "04_human_facing_report": "pending",
-            "05_export": "pending",
+            "01_intake": "pending",
+            "02_global_audit": "pending",
+            "03_adversarial_audit": "pending",
+            "04_correction_plan": "pending",
+            "05_human_facing_report": "pending",
+            "06_final_manuscript": "pending",
+            "07_export": "pending",
         },
     )
     write_json(run_root / "run_manifest.json", run_manifest.to_dict())

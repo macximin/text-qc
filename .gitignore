@@ -1,4 +1,9 @@
 # Runtime workspaces: manuscripts, reports, exports, and private run data.
+inbox/*
+!inbox/.gitkeep
+!inbox/initial_manuscripts/
+inbox/initial_manuscripts/*
+!inbox/initial_manuscripts/.gitkeep
 workspace/*
 !workspace/.gitkeep
 runs/*
@@ -28,4 +33,3 @@ venv/
 Thumbs.db
 .idea/
 .vscode/
-
