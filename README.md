@@ -16,8 +16,8 @@
 ```powershell
 cd C:\Users\wjjo\Desktop\novel-qc-loop
 $env:PYTHONPATH = ".\src"
-python -m novel_qc_loop intake --input "C:\path\to\manuscript.txt" --mode full --genre "현대판타지" --audience "3040"
-python -m novel_qc_loop init-work --slug canaria --title "카나리아" --genre "현대판타지" --audience "3040" --platform "네이버 시리즈"
+python -m novel_qc_loop intake --input "C:\path\to\manuscript.txt" --mode full --genre "무협" --audience "성인 독자"
+python -m novel_qc_loop init-work --slug sample-title --title "샘플 작품" --genre "판타지" --audience "일반 독자" --platform "플랫폼명"
 python -m novel_qc_loop start-run --work canaria --kind global-audit
 python -m novel_qc_loop list-works
 python -m novel_qc_loop portfolio-status
@@ -89,7 +89,7 @@ workspace/canaria/
 - `docs/ide_first_operating_model.md`
 - `docs/intake_harness.md`
 - `docs/repeatable_multi_work_loop.md`
-- `docs/promotion_polish.md`
+- `docs/ai_slop_signal.md`
 
 ## 현재 이식된 레거시
 

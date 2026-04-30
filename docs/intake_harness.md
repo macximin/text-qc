@@ -8,9 +8,9 @@
 .\scripts\novel-qc-loop.ps1 intake `
   --input "C:\path\to\manuscript.txt" `
   --mode full `
-  --genre "현대판타지" `
-  --audience "3040" `
-  --platform "네이버 시리즈"
+  --genre "장르명" `
+  --audience "대상 독자" `
+  --platform "플랫폼명"
 ```
 
 지원 형식:
@@ -74,4 +74,3 @@ workspace/{work_slug}/
 기본 보고서는 `human-facing/one_page_report.md` 하나입니다.
 
 중간 분석, 긴 체크리스트, 모델에게 넘길 지시는 `llm-facing/`에 둡니다. 작가/편집자에게 바로 보여줄 문서는 기본적으로 1장만 유지합니다.
-

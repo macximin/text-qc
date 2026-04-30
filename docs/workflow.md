@@ -6,9 +6,9 @@
 .\scripts\novel-qc-loop.ps1 init-work `
   --slug canaria `
   --title "카나리아" `
-  --genre "현대판타지" `
-  --audience "3040" `
-  --platform "네이버 시리즈" `
+  --genre "장르명" `
+  --audience "대상 독자" `
+  --platform "플랫폼명" `
   --source "C:\path\to\origin"
 ```
 
@@ -53,7 +53,7 @@ Pass 2: 독자-facing
 
 - 모바일 호흡
 - 대화 밀도
-- 장르 대리만족
+- 장르 기대와 독자 납득
 - 독자가 납득할 근거
 
 Pass 3: AI 티/문체

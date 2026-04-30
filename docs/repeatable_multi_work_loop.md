@@ -67,7 +67,7 @@
 
 - `global-audit`: 전역 검수. P0/P1 치명상 우선.
 - `adversarial-audit`: 독자/심사자 관점 3회 감리.
-- `promotion-polish`: 플랫폼/대상 독자 기준의 문체/대리만족 보정.
+- `ai-slop-scan`: 특정 장르 취향을 강제하지 않고 AI 티, 반복 표현, 말투 균질화를 점검.
 - `correction-pass`: `ⓐ`/`ⓐⓐ` 교정안 생성.
 - `export-pass`: PDF/HWPX/HTML 산출과 확인.
 
