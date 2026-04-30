@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .reports import validate_human_report
 from .submission import validate_manual_review_submission, write_manual_review_scaffold
 from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
 
@@ -263,6 +264,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             bridge_candidates_path=bridge_candidates_path,
             era_candidates_path=era_candidates_path,
             ai_slop_path=ai_slop_path,
+            human_report_path=run_root / "human-facing" / "one_page_report.md",
             manual_review_submission_path=manual_review_submission_path,
         ),
     )
@@ -799,7 +801,10 @@ def refresh_ai_slop_report(run_root: Path, summary: dict[str, Any]) -> None:
 def render_ai_slop_report_section(summary: dict[str, Any]) -> str:
     probability = summary.get("estimated_ai_written_probability_percent", 0)
     label = summary.get("risk_label_ko", "미정")
-    confidence = summary.get("confidence", "Low")
+    confidence = {"High": "높음", "Medium": "중간", "Low": "낮음"}.get(
+        str(summary.get("confidence", "Low")),
+        "낮음",
+    )
     top_terms = summary.get("top_terms") or []
     term_text = ", ".join(f"{item['term']}({item['count']})" for item in top_terms[:5]) if top_terms else "뚜렷한 상위 반복어 없음"
     features = [
@@ -815,11 +820,10 @@ def render_ai_slop_report_section(summary: dict[str, Any]) -> str:
         [
             "## AI 티 점검",
             "",
-            f"- AI 작성 추정치: {probability}% (`{label}`)",
+            f"- 주장: AI 티 위험도는 {probability}%({label}) 수준입니다.",
+            f"- 근거: {feature_text}; 상위 반복어는 {term_text}입니다.",
             f"- 신뢰도: {confidence}",
             "- 해석: 문체/반복/균질화 신호 기반 추정치이며, 실제 작성 도구를 증명하는 포렌식 판정은 아님.",
-            f"- 근거: {feature_text}",
-            f"- 상위 반복어: {term_text}",
             f"- 처리 방향: {summary.get('recommended_action', '')}",
         ]
     )
@@ -917,6 +921,7 @@ def build_submission_gate(
     bridge_candidates_path: Path,
     era_candidates_path: Path,
     ai_slop_path: Path,
+    human_report_path: Path,
     manual_review_submission_path: Path,
 ) -> dict[str, Any]:
     hygiene_count = count_jsonl_rows(hygiene_flags_path)
@@ -924,6 +929,7 @@ def build_submission_gate(
     bridge_count = count_jsonl_rows(bridge_candidates_path)
     era_count = count_jsonl_rows(era_candidates_path)
     ai_slop_summary = read_json(ai_slop_path) if ai_slop_path.exists() else {}
+    human_report: dict[str, Any] | None = None
     blockers = []
     if int(inspection.get("stage_cues") or 0) > 0:
         blockers.append("stage_cues_present")
@@ -940,6 +946,12 @@ def build_submission_gate(
             blockers.append("manual_review_submission_invalid_json")
     if not manual_ready:
         blockers.append("manual_review_not_complete")
+    if human_report_path.exists():
+        human_report = validate_human_report(human_report_path).to_dict()
+        if not human_report.get("ready_for_delivery"):
+            blockers.append("human_report_not_claim_evidence_ready")
+    else:
+        blockers.append("human_report_missing")
     payload = {
         "schema_version": "submission_gate.v1",
         "ready_for_submission": not blockers,
@@ -967,6 +979,8 @@ def build_submission_gate(
     }
     if manual_review is not None:
         payload["manual_review"] = manual_review
+    if human_report is not None:
+        payload["human_report"] = human_report
     return payload
 
 

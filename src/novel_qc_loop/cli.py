@@ -8,6 +8,7 @@ from typing import Any
 from .analyze import analyze_run
 from .corrections import validate_changes_file, write_validation_result
 from .intake import intake_inbox, intake_manuscript
+from .reports import validate_human_report, write_report_validation_result
 from .submission import validate_manual_review_submission, write_submission_validation_result
 from .workspace import (
     build_portfolio_status,
@@ -99,6 +100,28 @@ def cmd_validate_submission(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate_report(args: argparse.Namespace) -> int:
+    if not args.run_root and not args.report:
+        raise SystemExit("one of --run-root or --report is required")
+    if args.run_root:
+        run_root = Path(args.run_root).resolve()
+        report_path = run_root / "human-facing" / "one_page_report.md"
+        default_output = run_root / "human-facing" / "report_validation.json"
+    else:
+        report_path = Path(args.report).resolve()
+        default_output = report_path.with_name("report_validation.json")
+    result = validate_human_report(report_path)
+    if args.output or args.run_root:
+        output_path = Path(args.output).resolve() if args.output else default_output
+        write_report_validation_result(result, output_path)
+        if args.run_root:
+            refresh_submission_gate_report(run_root, result.to_dict())
+        print(f"human report validation written: {output_path}")
+        return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
     gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
     gate_exists = gate_path.exists()
@@ -107,13 +130,46 @@ def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
     blockers = [
         item
         for item in blockers
-        if item not in {"manual_review_not_complete", "manual_review_submission_invalid_json"}
+        if item
+        not in {
+            "manual_review_not_complete",
+            "manual_review_submission_invalid_json",
+            "human_report_not_claim_evidence_ready",
+            "human_report_missing",
+        }
     ]
     if not gate_exists:
         blockers.append("evidence_not_generated")
     if not validation.get("ready_for_submission"):
         blockers.append("manual_review_not_complete")
+    report_path = run_root / "human-facing" / "one_page_report.md"
+    if report_path.exists():
+        report_validation = validate_human_report(report_path).to_dict()
+        gate["human_report"] = report_validation
+        if not report_validation.get("ready_for_delivery"):
+            blockers.append("human_report_not_claim_evidence_ready")
     gate["manual_review"] = validation
+    gate["blockers"] = sorted(set(blockers))
+    gate["ready_for_submission"] = not gate["blockers"]
+    gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
+    write_json(gate_path, gate)
+
+
+def refresh_submission_gate_report(run_root: Path, validation: dict[str, Any]) -> None:
+    gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
+    gate_exists = gate_path.exists()
+    gate = read_json(gate_path) if gate_exists else {"schema_version": "submission_gate.v1"}
+    blockers = [str(item) for item in gate.get("blockers", [])]
+    blockers = [
+        item
+        for item in blockers
+        if item not in {"human_report_not_claim_evidence_ready", "human_report_missing"}
+    ]
+    if not gate_exists:
+        blockers.append("evidence_not_generated")
+    if not validation.get("ready_for_delivery"):
+        blockers.append("human_report_not_claim_evidence_ready")
+    gate["human_report"] = validation
     gate["blockers"] = sorted(set(blockers))
     gate["ready_for_submission"] = not gate["blockers"]
     gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
@@ -310,6 +366,12 @@ def build_parser() -> argparse.ArgumentParser:
     validate_submission.add_argument("--run-root")
     validate_submission.add_argument("--output")
     validate_submission.set_defaults(func=cmd_validate_submission)
+
+    validate_report = subparsers.add_parser("validate-report", help="validate Korean human-facing final report")
+    validate_report.add_argument("--report")
+    validate_report.add_argument("--run-root")
+    validate_report.add_argument("--output")
+    validate_report.set_defaults(func=cmd_validate_report)
 
     mark_stage = subparsers.add_parser("mark-stage", help="update one run stage status")
     mark_stage.add_argument("--run-root", required=True)

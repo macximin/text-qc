@@ -24,6 +24,7 @@ Run: `{{run_id}}`
 
 ```powershell
 .\scripts\novel-qc-loop.ps1 validate-submission --run-root "{{run_root}}"
+.\scripts\novel-qc-loop.ps1 validate-report --run-root "{{run_root}}"
 ```
 
 ## 작업 원칙
@@ -32,6 +33,8 @@ Run: `{{run_id}}`
 - 검수와 교정을 분리한다.
 - 내부 분석은 `llm-facing/`에 둔다.
 - 작가/편집자에게 보여줄 보고서는 `human-facing/one_page_report.md`를 기본 1장으로 유지한다.
+- human-facing 보고서는 한국어로 쓰고, 모든 핵심 판단에 `주장`과 `근거`를 함께 둔다.
+- 근거 없는 주장은 최종 보고서에 올리지 않는다.
 - 최종 원고 후보는 `final_manuscript/final_manuscript.txt`에 둔다.
 
 ## 모드별 목표

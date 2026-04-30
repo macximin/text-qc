@@ -22,6 +22,7 @@ python -m novel_qc_loop start-run --work canaria --kind global-audit
 python -m novel_qc_loop analyze-run --run-root "workspace\sample-title\runs\RUN_ID"
 python -m novel_qc_loop validate-changes --changes "workspace\sample-title\runs\RUN_ID\corrections\changes.json"
 python -m novel_qc_loop validate-submission --run-root "workspace\sample-title\runs\RUN_ID"
+python -m novel_qc_loop validate-report --run-root "workspace\sample-title\runs\RUN_ID"
 python -m novel_qc_loop list-works
 python -m novel_qc_loop portfolio-status
 python -m novel_qc_loop inspect-text --input "C:\path\to\manuscript.txt"
@@ -95,6 +96,7 @@ workspace/canaria/
 - 자동 변환은 검수/리포트 보조에만 쓰고, 문장 의미를 바꾸는 교정은 사람이 확인한다.
 - 검수와 교정은 분리한다. 검수는 문제와 근거를 남기고, 교정은 변경안과 승인 상태를 남긴다.
 - 리포트는 내부용 raw 판정과 작가/편집자-facing 보고서를 분리한다.
+- 최종 보고서는 한국어 human-facing 문서여야 하며, 모든 핵심 판단에는 주장과 근거를 함께 둔다.
 - HWPX 교정 표시는 파란색 변경 표기를 표준으로 둔다.
 
 ## IDE-first
