@@ -16,9 +16,12 @@
 ```powershell
 cd C:\Users\wjjo\Desktop\novel-qc-loop
 $env:PYTHONPATH = ".\src"
-python -m novel_qc_loop intake --input "C:\path\to\manuscript.txt" --mode full --genre "무협" --audience "성인 독자"
+python -m novel_qc_loop intake --input "C:\path\to\manuscript.txt" --mode full --genre "무협" --audience "성인 독자" --analyze
 python -m novel_qc_loop init-work --slug sample-title --title "샘플 작품" --genre "판타지" --audience "일반 독자" --platform "플랫폼명"
 python -m novel_qc_loop start-run --work canaria --kind global-audit
+python -m novel_qc_loop analyze-run --run-root "workspace\sample-title\runs\RUN_ID"
+python -m novel_qc_loop validate-changes --changes "workspace\sample-title\runs\RUN_ID\corrections\changes.json"
+python -m novel_qc_loop validate-submission --run-root "workspace\sample-title\runs\RUN_ID"
 python -m novel_qc_loop list-works
 python -m novel_qc_loop portfolio-status
 python -m novel_qc_loop inspect-text --input "C:\path\to\manuscript.txt"
@@ -68,9 +71,18 @@ workspace/canaria/
 
 - `llm-facing/task_brief.md`
 - `llm-facing/handoff_checklist.md`
+- `llm-facing/adversarial_3pass_brief.md`
 - `human-facing/one_page_report.md`
 - `final_manuscript/final_manuscript.txt`
 - `evidence/inspection.json`
+- `evidence/episodes/*.txt`
+- `evidence/facts/*.jsonl`
+- `evidence/facts/timeline_summary.json`
+- `evidence/facts/character_title_matrix.json`
+- `evidence/review/*.jsonl`
+- `evidence/submission/submission_gate.json`
+- `evidence/submission/manual_review_queue.jsonl`
+- `evidence/submission/manual_review_submission.json`
 
 ## 핵심 원칙
 
@@ -88,6 +100,10 @@ workspace/canaria/
 
 - `docs/ide_first_operating_model.md`
 - `docs/intake_harness.md`
+- `docs/harness_contract.md`
+- `docs/legacy_ssot_mapping.md`
+- `docs/adversarial_audit.md`
+- `docs/correction_protocol.md`
 - `docs/repeatable_multi_work_loop.md`
 - `docs/ai_slop_signal.md`
 

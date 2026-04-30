@@ -3,8 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
+from .analyze import analyze_run
+from .corrections import validate_changes_file, write_validation_result
 from .intake import intake_inbox, intake_manuscript
+from .submission import validate_manual_review_submission, write_submission_validation_result
 from .workspace import (
     build_portfolio_status,
     create_run,
@@ -12,6 +16,7 @@ from .workspace import (
     discover_runs,
     discover_works,
     inspect_text,
+    read_json,
     write_json,
 )
 
@@ -54,6 +59,76 @@ def cmd_start_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analyze_run(args: argparse.Namespace) -> int:
+    result = analyze_run(run_root=Path(args.run_root).resolve())
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_validate_changes(args: argparse.Namespace) -> int:
+    result = validate_changes_file(Path(args.changes))
+    if args.output:
+        write_validation_result(result, Path(args.output))
+        print(f"correction validation written: {args.output}")
+        return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_validate_submission(args: argparse.Namespace) -> int:
+    if not args.run_root and not args.submission:
+        raise SystemExit("one of --run-root or --submission is required")
+    if args.run_root:
+        run_root = Path(args.run_root).resolve()
+        submission_dir = run_root / "evidence" / "submission"
+        submission_path = submission_dir / "manual_review_submission.json"
+        default_output = submission_dir / "manual_review_validation.json"
+    else:
+        run_root = None
+        submission_path = Path(args.submission).resolve()
+        default_output = submission_path.with_name("manual_review_validation.json")
+    result = validate_manual_review_submission(submission_path)
+    if args.output or args.run_root:
+        output_path = Path(args.output).resolve() if args.output else default_output
+        write_submission_validation_result(result, output_path)
+        if run_root:
+            refresh_submission_gate(run_root, result.to_dict())
+        print(f"manual review validation written: {output_path}")
+        return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
+    gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
+    gate = read_json(gate_path) if gate_path.exists() else {"schema_version": "submission_gate.v1"}
+    blockers = [str(item) for item in gate.get("blockers", [])]
+    blockers = [item for item in blockers if item != "manual_review_not_complete"]
+    if not validation.get("ready_for_submission"):
+        blockers.append("manual_review_not_complete")
+    gate["manual_review"] = validation
+    gate["blockers"] = sorted(set(blockers))
+    gate["ready_for_submission"] = not gate["blockers"]
+    gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
+    write_json(gate_path, gate)
+
+
+def cmd_mark_stage(args: argparse.Namespace) -> int:
+    run_root = Path(args.run_root).resolve()
+    manifest_path = run_root / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stages = manifest.setdefault("stages", {})
+    if args.stage not in stages and not args.allow_new:
+        known = ", ".join(stages.keys())
+        raise SystemExit(f"unknown stage: {args.stage}\nknown stages: {known}")
+    stages[args.stage] = args.status
+    if args.note:
+        manifest.setdefault("notes", []).append(args.note)
+    write_json(manifest_path, manifest)
+    print(f"stage updated: {args.stage}={args.status}")
+    return 0
+
+
 def cmd_intake(args: argparse.Namespace) -> int:
     result = intake_manuscript(
         input_path=Path(args.input),
@@ -68,7 +143,10 @@ def cmd_intake(args: argparse.Namespace) -> int:
         platform=args.platform,
         source_note=args.note or "",
     )
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    payload = result.to_dict()
+    if args.analyze:
+        payload["analysis"] = analyze_run(run_root=Path(result.run_root)).to_dict()
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -82,7 +160,13 @@ def cmd_intake_inbox(args: argparse.Namespace) -> int:
         audience=args.audience,
         platform=args.platform,
     )
-    payload = {"count": len(results), "items": [result.to_dict() for result in results]}
+    items = []
+    for result in results:
+        item = result.to_dict()
+        if args.analyze:
+            item["analysis"] = analyze_run(run_root=Path(result.run_root)).to_dict()
+        items.append(item)
+    payload = {"count": len(results), "items": items}
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
@@ -205,6 +289,29 @@ def build_parser() -> argparse.ArgumentParser:
     start_run.add_argument("--note", action="append")
     start_run.set_defaults(func=cmd_start_run)
 
+    analyze = subparsers.add_parser("analyze-run", help="build facts/review evidence for one run")
+    analyze.add_argument("--run-root", required=True)
+    analyze.set_defaults(func=cmd_analyze_run)
+
+    validate_changes = subparsers.add_parser("validate-changes", help="validate correction changes JSON")
+    validate_changes.add_argument("--changes", required=True)
+    validate_changes.add_argument("--output")
+    validate_changes.set_defaults(func=cmd_validate_changes)
+
+    validate_submission = subparsers.add_parser("validate-submission", help="validate manual review submission JSON")
+    validate_submission.add_argument("--submission")
+    validate_submission.add_argument("--run-root")
+    validate_submission.add_argument("--output")
+    validate_submission.set_defaults(func=cmd_validate_submission)
+
+    mark_stage = subparsers.add_parser("mark-stage", help="update one run stage status")
+    mark_stage.add_argument("--run-root", required=True)
+    mark_stage.add_argument("--stage", required=True)
+    mark_stage.add_argument("--status", required=True)
+    mark_stage.add_argument("--note")
+    mark_stage.add_argument("--allow-new", action="store_true")
+    mark_stage.set_defaults(func=cmd_mark_stage)
+
     intake = subparsers.add_parser("intake", help="ingest one manuscript and create a harness run")
     intake.add_argument("--input", required=True)
     intake.add_argument("--workspace", default="workspace")
@@ -217,6 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
     intake.add_argument("--audience", default="")
     intake.add_argument("--platform", default="")
     intake.add_argument("--note", default="")
+    intake.add_argument("--analyze", action="store_true", help="run evidence extraction immediately after intake")
     intake.set_defaults(func=cmd_intake)
 
     intake_box = subparsers.add_parser("intake-inbox", help="ingest all supported files in an inbox")
@@ -227,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     intake_box.add_argument("--genre", default="")
     intake_box.add_argument("--audience", default="")
     intake_box.add_argument("--platform", default="")
+    intake_box.add_argument("--analyze", action="store_true", help="run evidence extraction for each ingested file")
     intake_box.set_defaults(func=cmd_intake_inbox)
 
     list_works = subparsers.add_parser("list-works", help="list works in the workspace")

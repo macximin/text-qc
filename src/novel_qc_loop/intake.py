@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .submission import write_manual_review_scaffold
 from .workspace import create_run, create_work, inspect_text, read_json, safe_slug, write_json
 
 
@@ -169,11 +170,13 @@ def intake_manuscript(
 
     inspection = inspect_text(extracted_text_path)
     write_json(run_root / "evidence" / "inspection.json", inspection.to_dict())
+    manual_paths = write_manual_review_scaffold(run_root / "evidence" / "submission")
 
     values = {
         "title": inferred_title,
         "work_slug": work_slug,
         "run_id": run_root.name,
+        "run_root": str(run_root),
         "mode": mode,
         "run_kind": run_kind,
         "genre": genre or "미지정",
@@ -186,17 +189,25 @@ def intake_manuscript(
         "chapter_count": inspection.chapter_count,
         "long_lines_120": inspection.long_lines_120,
         "long_lines_200": inspection.long_lines_200,
+        "manual_review_queue_path": str(manual_paths["queue_path"]),
+        "manual_review_submission_path": str(manual_paths["submission_path"]),
     }
 
     llm_task_brief_path = run_root / "llm-facing" / "task_brief.md"
     one_page_report_path = run_root / "human-facing" / "one_page_report.md"
     checklist_path = run_root / "llm-facing" / "handoff_checklist.md"
+    adversarial_brief_path = run_root / "llm-facing" / "adversarial_3pass_brief.md"
+    correction_protocol_path = run_root / "corrections" / "marker_protocol.md"
+    changes_path = run_root / "corrections" / "changes.json"
     final_readme_path = run_root / "final_manuscript" / "README.md"
     final_manuscript_path = run_root / "final_manuscript" / "final_manuscript.txt"
 
     _render_file(templates_root / "llm_task_brief.md", llm_task_brief_path, values)
     _render_file(templates_root / "human_facing_one_page.md", one_page_report_path, values)
     _render_file(templates_root / "llm_handoff_checklist.md", checklist_path, values)
+    _render_file(templates_root / "adversarial_3pass_brief.md", adversarial_brief_path, values)
+    _render_file(templates_root / "correction_marker_protocol.md", correction_protocol_path, values)
+    _render_file(templates_root / "correction_changes.empty.json", changes_path, values)
     _render_file(templates_root / "final_manuscript_readme.md", final_readme_path, values)
     final_manuscript_path.write_text(source_text, encoding="utf-8")
 
@@ -209,6 +220,11 @@ def intake_manuscript(
         "inspection_path": str(run_root / "evidence" / "inspection.json"),
         "one_page_report_path": str(one_page_report_path),
         "llm_task_brief_path": str(llm_task_brief_path),
+        "adversarial_brief_path": str(adversarial_brief_path),
+        "correction_protocol_path": str(correction_protocol_path),
+        "changes_path": str(changes_path),
+        "manual_review_queue_path": str(manual_paths["queue_path"]),
+        "manual_review_submission_path": str(manual_paths["submission_path"]),
         "final_manuscript_path": str(final_manuscript_path),
     }
     write_json(run_manifest_path, run_manifest)
@@ -264,4 +280,3 @@ def _render_file(template_path: Path, output_path: Path, values: dict[str, Any])
     template = template_path.read_text(encoding="utf-8")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_template(template, values), encoding="utf-8")
-

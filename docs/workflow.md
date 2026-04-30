@@ -21,18 +21,24 @@
 권장 방식은 intake harness입니다.
 
 ```powershell
-.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full
+.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full --analyze
 ```
 
 초기 원고함 일괄 처리:
 
 ```powershell
-.\scripts\novel-qc-loop.ps1 intake-inbox --mode full
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full --analyze
 ```
 
 ## 2. 1차 전역 감리
 
 목표는 빠르게 치명상을 찾는 것입니다.
+
+먼저 evidence를 생성합니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 analyze-run --run-root "workspace\{work}\runs\{run_id}"
+```
 
 - 말이 되는가
 - 시간/장소/인물/수치가 깨지지 않았는가
@@ -62,6 +68,12 @@ Pass 3: AI 티/문체
 - 과잉 감탄
 - 반복 표현
 - 불필요한 거창함
+
+완료 후 `evidence/submission/manual_review_submission.json`을 채우고 검증합니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 validate-submission --run-root "workspace\{work}\runs\{run_id}"
+```
 
 ## 4. 교정안 작성
 

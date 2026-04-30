@@ -12,6 +12,10 @@ from .models import RunManifest, TextInspection, WorkManifest
 WORK_SUBDIRS = ("inputs", "extracted", "runs", "reports", "corrections", "exports", "archive")
 RUN_SUBDIRS = (
     "evidence",
+    "evidence/episodes",
+    "evidence/facts",
+    "evidence/review",
+    "evidence/submission",
     "llm-facing",
     "human-facing",
     "draft_reports",
@@ -37,6 +41,12 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows)
+    path.write_text(payload + ("\n" if payload else ""), encoding="utf-8")
 
 
 def discover_works(*, workspace_root: Path) -> list[dict[str, Any]]:

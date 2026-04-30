@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ManualReviewSubmission",
+  "type": "object",
+  "required": ["schema_version", "status", "checked_axes", "passes", "findings", "remaining_risks", "final_summary"],
+  "properties": {
+    "schema_version": { "const": "manual_review_submission.v1" },
+    "status": { "enum": ["pending", "in_progress", "complete"] },
+    "reviewer": { "type": "string" },
+    "reviewed_at": { "type": "string" },
+    "checked_axes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["axis", "label", "status", "notes"],
+        "properties": {
+          "axis": { "type": "string" },
+          "label": { "type": "string" },
+          "status": { "enum": ["pending", "checked", "skipped"] },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "passes": {
+      "type": "object",
+      "required": ["pass1", "pass2", "pass3"],
+      "properties": {
+        "pass1": { "$ref": "#/$defs/pass_result" },
+        "pass2": { "$ref": "#/$defs/pass_result" },
+        "pass3": { "$ref": "#/$defs/pass_result" }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "remaining_risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "final_summary": { "type": "string" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "pass_result": {
+      "type": "object",
+      "required": ["status", "notes", "completed_task_ids"],
+      "properties": {
+        "status": { "enum": ["pending", "completed", "skipped"] },
+        "notes": { "type": "array", "items": { "type": "string" } },
+        "completed_task_ids": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["priority", "status", "category", "claim", "rationale"],
+      "properties": {
+        "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+        "status": { "enum": ["확정", "유보", "기각", "confirmed", "deferred", "rejected"] },
+        "category": { "type": "string" },
+        "claim": { "type": "string" },
+        "rationale": { "type": "string" },
+        "evidence": { "type": "string" },
+        "fix_hint": { "type": "string" },
+        "reader_risk": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

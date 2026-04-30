@@ -15,8 +15,11 @@
       "type": "object",
       "additionalProperties": { "type": "string" }
     },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
     "notes": { "type": "array", "items": { "type": "string" } }
   },
   "additionalProperties": false
 }
-

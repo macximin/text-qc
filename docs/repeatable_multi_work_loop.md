@@ -8,10 +8,16 @@
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 ```
 
+증거 파일까지 즉시 생성:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 intake-inbox --mode full --analyze
+```
+
 단일 원고 intake:
 
 ```powershell
-.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full
+.\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full --analyze
 ```
 
 작품 목록:
@@ -70,6 +76,40 @@
 - `ai-slop-scan`: 특정 장르 취향을 강제하지 않고 AI 티, 반복 표현, 말투 균질화를 점검.
 - `correction-pass`: `ⓐ`/`ⓐⓐ` 교정안 생성.
 - `export-pass`: PDF/HWPX/HTML 산출과 확인.
+
+## 자동 evidence 생성
+
+```powershell
+.\scripts\novel-qc-loop.ps1 analyze-run --run-root "workspace\{work}\runs\{run_id}"
+```
+
+생성물:
+
+- `evidence/facts/dates.jsonl`
+- `evidence/facts/absolute_dates.jsonl`
+- `evidence/facts/relative_times.jsonl`
+- `evidence/facts/ages.jsonl`
+- `evidence/facts/times.jsonl`
+- `evidence/facts/money.jsonl`
+- `evidence/facts/percents.jsonl`
+- `evidence/facts/titles.jsonl`
+- `evidence/facts/kin_titles.jsonl`
+- `evidence/facts/timeline_summary.json`
+- `evidence/facts/character_title_matrix.json`
+- `evidence/review/hygiene_flags.jsonl`
+- `evidence/review/replay_candidates.jsonl`
+- `evidence/review/bridge_review_candidates.jsonl`
+- `evidence/review/era_review_candidates.jsonl`
+- `evidence/review/ai_slop_signals.json`
+- `evidence/submission/submission_gate.json`
+- `evidence/submission/manual_review_queue.jsonl`
+- `evidence/submission/manual_review_submission.json`
+
+감리 제출 검증:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 validate-submission --run-root "workspace\{work}\runs\{run_id}"
+```
 
 ## 팀 운영 규칙
 

@@ -8,7 +8,23 @@ Run: `{{run_id}}`
 
 - 원본 경로: `{{source_path}}`
 - 추출 텍스트: `{{extracted_text_path}}`
+- 감리 큐: `{{manual_review_queue_path}}`
+- 감리 제출 파일: `{{manual_review_submission_path}}`
 - 장르/독자/플랫폼: `{{genre}} / {{audience}} / {{platform}}`
+
+## 먼저 실행할 하네스
+
+```powershell
+.\scripts\novel-qc-loop.ps1 analyze-run --run-root "{{run_root}}"
+```
+
+이 명령은 날짜/시간/금액/직함/송고 위생/회차 반복/AI 티 후보를 `evidence/` 아래에 만든다. 자동 evidence는 판정이 아니라 감리 후보로만 사용한다.
+
+감리 완료 후:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 validate-submission --run-root "{{run_root}}"
+```
 
 ## 작업 원칙
 
@@ -47,4 +63,3 @@ Run: `{{run_id}}`
 - 회차 수: {{chapter_count}}
 - 120자 이상 줄: {{long_lines_120}}
 - 200자 이상 줄: {{long_lines_200}}
-
