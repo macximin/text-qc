@@ -183,7 +183,7 @@ def create_run(
     if not manifest_path.exists():
         raise FileNotFoundError(f"work manifest not found: {manifest_path}")
 
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "__" + safe_slug(kind)
+    run_id = unique_run_id(work_root, safe_slug(kind))
     run_root = work_root / "runs" / run_id
     run_root.mkdir(parents=True, exist_ok=False)
     for subdir in RUN_SUBDIRS:
@@ -209,12 +209,24 @@ def create_run(
     return run_root
 
 
+def unique_run_id(work_root: Path, kind_slug: str) -> str:
+    base = datetime.now().strftime("%Y%m%d_%H%M%S") + "__" + kind_slug
+    runs_root = work_root / "runs"
+    candidate = base
+    idx = 2
+    while (runs_root / candidate).exists():
+        candidate = f"{base}-{idx:02d}"
+        idx += 1
+    return candidate
+
+
 def inspect_text(path: Path) -> TextInspection:
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
     nonempty = [line for line in lines if line.strip()]
     lengths = [len(line) for line in nonempty]
     chapter_matches = list(re.finditer(r"(?m)^ⓚ(\d{3})\s*$", text))
+    header_matches = list(re.finditer(r"(?m)^#\s+(.+?)\s*$", text))
     chapter_chars: dict[str, int] = {}
     if chapter_matches:
         for idx, match in enumerate(chapter_matches):
@@ -222,6 +234,12 @@ def inspect_text(path: Path) -> TextInspection:
             end = chapter_matches[idx + 1].start() if idx + 1 < len(chapter_matches) else len(text)
             body = text[start:end]
             chapter_chars[match.group(1)] = len(re.sub(r"\s+", "", body))
+    elif header_matches:
+        for idx, match in enumerate(header_matches):
+            start = match.end()
+            end = header_matches[idx + 1].start() if idx + 1 < len(header_matches) else len(text)
+            body = text[start:end]
+            chapter_chars[f"{idx + 1:03d}"] = len(re.sub(r"\s+", "", body))
 
     avg_len = round(sum(lengths) / len(lengths), 1) if lengths else 0.0
     return TextInspection(
@@ -238,6 +256,6 @@ def inspect_text(path: Path) -> TextInspection:
         question_count=text.count("?"),
         markdown_headers=len(re.findall(r"(?m)^#{1,6}\s+", text)),
         stage_cues=len(re.findall(r"(?m)^\[[^\]\n]{1,160}\]\s*$", text)),
-        chapter_count=len(chapter_matches),
+        chapter_count=len(chapter_matches) or len(header_matches),
         chapter_chars_no_space=chapter_chars,
     )

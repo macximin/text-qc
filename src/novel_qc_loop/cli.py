@@ -101,9 +101,16 @@ def cmd_validate_submission(args: argparse.Namespace) -> int:
 
 def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
     gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
-    gate = read_json(gate_path) if gate_path.exists() else {"schema_version": "submission_gate.v1"}
+    gate_exists = gate_path.exists()
+    gate = read_json(gate_path) if gate_exists else {"schema_version": "submission_gate.v1"}
     blockers = [str(item) for item in gate.get("blockers", [])]
-    blockers = [item for item in blockers if item != "manual_review_not_complete"]
+    blockers = [
+        item
+        for item in blockers
+        if item not in {"manual_review_not_complete", "manual_review_submission_invalid_json"}
+    ]
+    if not gate_exists:
+        blockers.append("evidence_not_generated")
     if not validation.get("ready_for_submission"):
         blockers.append("manual_review_not_complete")
     gate["manual_review"] = validation

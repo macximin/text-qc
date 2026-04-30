@@ -91,8 +91,14 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
             continue
         axis = str(item.get("axis", ""))
         seen_axes.add(axis)
-        if item.get("status") == "checked":
+        status = item.get("status")
+        notes = str(item.get("notes") or "").strip()
+        if status == "checked":
             reviewed_axis_count += 1
+            if not notes:
+                issues.append({"field": f"checked_axes[{index}].notes", "message": "checked axis requires notes"})
+        if status == "skipped" and not notes:
+            issues.append({"field": f"checked_axes[{index}].notes", "message": "skipped axis requires reason"})
         if axis not in required_axes:
             issues.append({"field": f"checked_axes[{index}].axis", "message": f"unknown axis: {axis}"})
 
@@ -112,6 +118,12 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
             continue
         if pass_payload.get("status") == "completed":
             completed_pass_count += 1
+            notes = pass_payload.get("notes", [])
+            task_ids = pass_payload.get("completed_task_ids", [])
+            if not isinstance(notes, list) or not any(str(note).strip() for note in notes):
+                issues.append({"field": f"passes.{pass_name}.notes", "message": "completed pass requires notes"})
+            if not isinstance(task_ids, list) or not task_ids:
+                issues.append({"field": f"passes.{pass_name}.completed_task_ids", "message": "completed pass requires task ids"})
 
     findings = payload.get("findings", [])
     if not isinstance(findings, list):
@@ -130,8 +142,11 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         payload.get("status") == "complete"
         and reviewed_axis_count >= len(REVIEW_AXES)
         and completed_pass_count >= len(PASS_NAMES)
+        and bool(str(payload.get("final_summary") or "").strip())
         and not issues
     )
+    if payload.get("status") == "complete" and not str(payload.get("final_summary") or "").strip():
+        issues.append({"field": "final_summary", "message": "complete submission requires final summary"})
     return SubmissionValidationResult(
         path=str(path),
         status=str(payload.get("status") or "pending"),

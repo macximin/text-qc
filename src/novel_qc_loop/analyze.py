@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .submission import write_manual_review_scaffold
+from .submission import validate_manual_review_submission, write_manual_review_scaffold
 from .workspace import inspect_text, read_json, write_json, write_jsonl
 
 
@@ -119,7 +119,7 @@ class AnalysisResult:
 def analyze_run(*, run_root: Path) -> AnalysisResult:
     manifest_path = run_root / "run_manifest.json"
     manifest = read_json(manifest_path)
-    source_text_path = Path(str(manifest.get("source_text_path") or ""))
+    source_text_path = resolve_source_text_path(run_root, str(manifest.get("source_text_path") or ""))
     if not source_text_path.exists():
         raise FileNotFoundError(f"source_text_path not found: {source_text_path}")
 
@@ -282,6 +282,21 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         manual_review_queue_path=str(manual_review_queue_path),
         manual_review_submission_path=str(manual_review_submission_path),
     )
+
+
+def resolve_source_text_path(run_root: Path, raw_path: str) -> Path:
+    source_path = Path(raw_path).expanduser()
+    if source_path.is_absolute():
+        return source_path
+    candidates = [
+        run_root / source_path,
+        run_root.parent.parent / source_path,
+        Path.cwd() / source_path,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0]
 
 
 def split_chapters(text: str) -> list[dict[str, Any]]:
@@ -571,22 +586,22 @@ def build_submission_gate(
     bridge_count = count_jsonl_rows(bridge_candidates_path)
     era_count = count_jsonl_rows(era_candidates_path)
     blockers = []
-    if int(inspection.get("markdown_headers") or 0) > 0:
-        blockers.append("markdown_headers_present")
     if int(inspection.get("stage_cues") or 0) > 0:
         blockers.append("stage_cues_present")
     if hygiene_count > 0:
         blockers.append("hygiene_flags_present")
     manual_ready = False
+    manual_review: dict[str, Any] | None = None
     if manual_review_submission_path.exists():
         try:
-            manual_payload = json.loads(manual_review_submission_path.read_text(encoding="utf-8"))
-            manual_ready = manual_payload.get("status") == "complete"
+            validation = validate_manual_review_submission(manual_review_submission_path)
+            manual_review = validation.to_dict()
+            manual_ready = validation.ready_for_submission
         except json.JSONDecodeError:
             blockers.append("manual_review_submission_invalid_json")
     if not manual_ready:
         blockers.append("manual_review_not_complete")
-    return {
+    payload = {
         "schema_version": "submission_gate.v1",
         "ready_for_submission": not blockers,
         "status": "blocked" if blockers else "ready",
@@ -601,6 +616,9 @@ def build_submission_gate(
             "long_lines_200": inspection.get("long_lines_200", 0),
         },
     }
+    if manual_review is not None:
+        payload["manual_review"] = manual_review
+    return payload
 
 
 def count_jsonl_rows(path: Path) -> int:
