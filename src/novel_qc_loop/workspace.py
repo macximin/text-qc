@@ -24,6 +24,13 @@ RUN_SUBDIRS = (
     "final_manuscript",
     "exports",
 )
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
+CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(\d{1,4})\s*$")
+MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
+NUMBERED_CHAPTER_RE = re.compile(
+    r"(?im)^\s*(?:제\s*)?(?P<num>\d{1,4})\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
+    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+)
 
 
 def safe_slug(value: str) -> str:
@@ -41,6 +48,21 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def decode_text_bytes(data: bytes) -> str:
+    for encoding in TEXT_ENCODINGS:
+        try:
+            text = data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if "\ufffd" not in text:
+            return text
+    return data.decode("utf-8", errors="replace")
+
+
+def read_text_auto(path: Path) -> str:
+    return decode_text_bytes(path.read_bytes())
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -209,6 +231,43 @@ def create_run(
     return run_root
 
 
+def find_chapter_markers(text: str) -> list[dict[str, Any]]:
+    marker_matches = list(CHAPTER_MARKER_RE.finditer(text))
+    if marker_matches:
+        return [
+            {
+                "episode": match.group(1).zfill(3),
+                "title": "",
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in marker_matches
+        ]
+
+    markdown_matches = list(MARKDOWN_HEADER_RE.finditer(text))
+    if markdown_matches:
+        return [
+            {
+                "episode": f"{idx + 1:03d}",
+                "title": match.group(1).strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for idx, match in enumerate(markdown_matches)
+        ]
+
+    numbered_matches = list(NUMBERED_CHAPTER_RE.finditer(text))
+    return [
+        {
+            "episode": match.group("num").zfill(3),
+            "title": match.group("title").strip(),
+            "start": match.start(),
+            "end": match.end(),
+        }
+        for match in numbered_matches
+    ]
+
+
 def unique_run_id(work_root: Path, kind_slug: str) -> str:
     base = datetime.now().strftime("%Y%m%d_%H%M%S") + "__" + kind_slug
     runs_root = work_root / "runs"
@@ -221,25 +280,18 @@ def unique_run_id(work_root: Path, kind_slug: str) -> str:
 
 
 def inspect_text(path: Path) -> TextInspection:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_text_auto(path)
     lines = text.splitlines()
     nonempty = [line for line in lines if line.strip()]
     lengths = [len(line) for line in nonempty]
-    chapter_matches = list(re.finditer(r"(?m)^ⓚ(\d{3})\s*$", text))
-    header_matches = list(re.finditer(r"(?m)^#\s+(.+?)\s*$", text))
+    chapter_markers = find_chapter_markers(text)
     chapter_chars: dict[str, int] = {}
-    if chapter_matches:
-        for idx, match in enumerate(chapter_matches):
-            start = match.end()
-            end = chapter_matches[idx + 1].start() if idx + 1 < len(chapter_matches) else len(text)
+    if chapter_markers:
+        for idx, marker in enumerate(chapter_markers):
+            start = int(marker["end"])
+            end = int(chapter_markers[idx + 1]["start"]) if idx + 1 < len(chapter_markers) else len(text)
             body = text[start:end]
-            chapter_chars[match.group(1)] = len(re.sub(r"\s+", "", body))
-    elif header_matches:
-        for idx, match in enumerate(header_matches):
-            start = match.end()
-            end = header_matches[idx + 1].start() if idx + 1 < len(header_matches) else len(text)
-            body = text[start:end]
-            chapter_chars[f"{idx + 1:03d}"] = len(re.sub(r"\s+", "", body))
+            chapter_chars[str(marker["episode"])] = len(re.sub(r"\s+", "", body))
 
     avg_len = round(sum(lengths) / len(lengths), 1) if lengths else 0.0
     return TextInspection(
@@ -256,6 +308,6 @@ def inspect_text(path: Path) -> TextInspection:
         question_count=text.count("?"),
         markdown_headers=len(re.findall(r"(?m)^#{1,6}\s+", text)),
         stage_cues=len(re.findall(r"(?m)^\[[^\]\n]{1,160}\]\s*$", text)),
-        chapter_count=len(chapter_matches) or len(header_matches),
+        chapter_count=len(chapter_markers),
         chapter_chars_no_space=chapter_chars,
     )

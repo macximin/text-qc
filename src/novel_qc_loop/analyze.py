@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .submission import validate_manual_review_submission, write_manual_review_scaffold
-from .workspace import inspect_text, read_json, write_json, write_jsonl
+from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
 
 
 AI_SLOP_TERMS = (
@@ -123,7 +123,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     if not source_text_path.exists():
         raise FileNotFoundError(f"source_text_path not found: {source_text_path}")
 
-    text = source_text_path.read_text(encoding="utf-8", errors="replace")
+    text = read_text_auto(source_text_path)
     chapters = split_chapters(text)
 
     episodes_dir = run_root / "evidence" / "episodes"
@@ -300,22 +300,20 @@ def resolve_source_text_path(run_root: Path, raw_path: str) -> Path:
 
 
 def split_chapters(text: str) -> list[dict[str, Any]]:
-    marker_matches = list(re.finditer(r"(?m)^ⓚ(\d{3})\s*$", text))
-    if marker_matches:
+    chapter_markers = find_chapter_markers(text)
+    if chapter_markers:
         chapters = []
-        for idx, match in enumerate(marker_matches):
-            start = match.end()
-            end = marker_matches[idx + 1].start() if idx + 1 < len(marker_matches) else len(text)
-            chapters.append({"episode": match.group(1), "text": text[start:end], "start_offset": start})
-        return chapters
-
-    header_matches = list(re.finditer(r"(?m)^#\s+(.+?)\s*$", text))
-    if header_matches:
-        chapters = []
-        for idx, match in enumerate(header_matches):
-            start = match.end()
-            end = header_matches[idx + 1].start() if idx + 1 < len(header_matches) else len(text)
-            chapters.append({"episode": f"{idx + 1:03d}", "title": match.group(1), "text": text[start:end], "start_offset": start})
+        for idx, marker in enumerate(chapter_markers):
+            start = int(marker["end"])
+            end = int(chapter_markers[idx + 1]["start"]) if idx + 1 < len(chapter_markers) else len(text)
+            chapters.append(
+                {
+                    "episode": marker["episode"],
+                    "title": marker.get("title", ""),
+                    "text": text[start:end],
+                    "start_offset": start,
+                }
+            )
         return chapters
 
     return [{"episode": "001", "text": text, "start_offset": 0}]

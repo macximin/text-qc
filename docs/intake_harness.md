@@ -17,8 +17,18 @@
 지원 형식:
 
 - `.txt`
+- `.text`
 - `.md`
-- `.hwpx` (`Preview/PrvText.txt` 기준 추출)
+- `.markdown`
+- `.hwpx` (`Preview/PrvText.txt` 우선, 없으면 HWPX XML 본문 fallback)
+
+텍스트 인코딩은 UTF-8/UTF-8 BOM/CP949/EUC-KR/UTF-16 계열을 자동 감지합니다.
+
+감지하는 회차 표기:
+
+- `ⓚ001`
+- Markdown 제목: `# 1화`
+- 번호형 제목: `제1화`, `001화`, `1장`, `Episode 1`
 
 ## 초기 원고함 intake
 

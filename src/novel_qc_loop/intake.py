@@ -3,16 +3,18 @@ from __future__ import annotations
 import re
 import shutil
 import zipfile
+from html import unescape
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from .submission import write_manual_review_scaffold
-from .workspace import create_run, create_work, inspect_text, read_json, safe_slug, write_json
+from .workspace import create_run, create_work, decode_text_bytes, inspect_text, read_json, read_text_auto, safe_slug, write_json
 
 
-SUPPORTED_INPUT_SUFFIXES = {".txt", ".md", ".hwpx"}
+SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwpx"}
 GENERIC_TITLE_HINTS = {
+    "0",
     "0_합본",
     "합본",
     "원고",
@@ -43,21 +45,32 @@ class IntakeResult:
 
 def read_source_text(path: Path) -> str:
     suffix = path.suffix.lower()
-    if suffix in {".txt", ".md"}:
-        return path.read_text(encoding="utf-8", errors="replace")
+    if suffix in {".txt", ".text", ".md", ".markdown"}:
+        return read_text_auto(path)
     if suffix == ".hwpx":
-        with zipfile.ZipFile(path, "r") as archive:
-            try:
-                return archive.read("Preview/PrvText.txt").decode("utf-8", errors="replace")
-            except KeyError as exc:
-                raise ValueError(f"HWPX preview text not found: {path}") from exc
+        return read_hwpx_text(path)
     raise ValueError(f"unsupported input type: {path.suffix}")
+
+
+def read_hwpx_text(path: Path) -> str:
+    with zipfile.ZipFile(path, "r") as archive:
+        if "Preview/PrvText.txt" in archive.namelist():
+            return decode_text_bytes(archive.read("Preview/PrvText.txt"))
+        text_parts: list[str] = []
+        for name in sorted(archive.namelist()):
+            if not name.lower().endswith(".xml"):
+                continue
+            xml = decode_text_bytes(archive.read(name))
+            text_parts.extend(unescape(match) for match in re.findall(r"<hp:t[^>]*>(.*?)</hp:t>", xml, flags=re.DOTALL))
+        if text_parts:
+            return "\n".join(part.strip() for part in text_parts if part.strip())
+    raise ValueError(f"HWPX text not found: {path}")
 
 
 def infer_title(path: Path, text: str) -> str:
     stem = path.stem.strip()
     cleaned_stem = _clean_title_candidate(stem)
-    if cleaned_stem and cleaned_stem.lower() not in GENERIC_TITLE_HINTS:
+    if cleaned_stem and not is_generic_title_candidate(cleaned_stem, stem):
         return cleaned_stem
 
     for raw_line in text.splitlines()[:80]:
@@ -65,6 +78,8 @@ def infer_title(path: Path, text: str) -> str:
         if not line:
             continue
         if re.fullmatch(r"ⓚ?\d{1,4}", line):
+            continue
+        if is_chapter_title_candidate(line):
             continue
         if 2 <= len(line) <= 60 and not line.endswith((".", "다", "요", "죠")):
             return line
@@ -75,6 +90,7 @@ def infer_title(path: Path, text: str) -> str:
 def _clean_title_candidate(value: str) -> str:
     text = str(value or "").strip()
     text = re.sub(r"^#{1,6}\s*", "", text)
+    text = re.sub(r"^(?:제목|작품명|타이틀|title)\s*[:：]\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"^ⓚ\d{3}\s*", "", text)
     text = re.sub(r"\[[^\]]*\]|\([^)]*\)", "", text)
     text = text.replace("_", " ").replace("-", " ")
@@ -82,6 +98,26 @@ def _clean_title_candidate(value: str) -> str:
     text = re.sub(r"\b(final|draft|source|manuscript)\b", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"(최종|수정\s*완|수정본|원고|합본|초기\s*원고)", "", text).strip()
     return re.sub(r"\s+", " ", text)
+
+
+def is_generic_title_candidate(cleaned: str, original: str) -> bool:
+    lowered = cleaned.lower()
+    raw_lowered = str(original or "").lower()
+    if lowered in GENERIC_TITLE_HINTS:
+        return True
+    if re.fullmatch(r"\d{1,4}", cleaned) and re.search(r"(합본|원고|draft|source|manuscript)", raw_lowered):
+        return True
+    return False
+
+
+def is_chapter_title_candidate(value: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)(?:[\s.:：_\-].*)?",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def unique_slug(workspace_root: Path, preferred: str) -> str:
