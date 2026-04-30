@@ -82,9 +82,12 @@ workspace/canaria/
 - `evidence/facts/timeline_summary.json`
 - `evidence/facts/character_title_matrix.json`
 - `evidence/review/*.jsonl`
+- `evidence/review/ai_slop_signals.json`
 - `evidence/submission/submission_gate.json`
 - `evidence/submission/manual_review_queue.jsonl`
 - `evidence/submission/manual_review_submission.json`
+
+`ai_slop_signals.json`에는 "AI로 쓴 확률"처럼 읽히는 자동 추정치가 들어가지만, 이는 포렌식 판정이 아니라 반복 표현/문장 리듬/추상어 밀도 기반의 **AI 티 위험도**입니다. 같은 값은 `human-facing/one_page_report.md`의 `AI 티 점검` 섹션에도 자동 반영됩니다.
 
 ## 핵심 원칙
 
