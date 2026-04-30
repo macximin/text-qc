@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from .workspace import (
+    build_portfolio_status,
+    create_run,
+    create_work,
+    discover_runs,
+    discover_works,
+    inspect_text,
+    write_json,
+)
+
+
+def _workspace_root(value: str) -> Path:
+    return Path(value).expanduser().resolve()
+
+
+def cmd_init_work(args: argparse.Namespace) -> int:
+    root = _workspace_root(args.workspace)
+    work_root = create_work(
+        workspace_root=root,
+        slug=args.slug,
+        title=args.title,
+        author=args.author,
+        genre=args.genre,
+        audience=args.audience,
+        platform=args.platform,
+        source_path=args.source,
+        notes=args.note or [],
+    )
+    print(f"created work: {work_root}")
+    return 0
+
+
+def cmd_start_run(args: argparse.Namespace) -> int:
+    root = _workspace_root(args.workspace)
+    run_root = create_run(
+        workspace_root=root,
+        work_slug=args.work,
+        kind=args.kind,
+        source_text_path=args.source,
+        notes=args.note or [],
+    )
+    print(f"created run: {run_root}")
+    return 0
+
+
+def cmd_list_works(args: argparse.Namespace) -> int:
+    root = _workspace_root(args.workspace)
+    works = discover_works(workspace_root=root)
+    if args.json:
+        print(json.dumps({"workspace": str(root), "works": works}, ensure_ascii=False, indent=2))
+        return 0
+
+    if not works:
+        print(f"no works found under {root}")
+        return 0
+
+    print(f"workspace: {root}")
+    for work in works:
+        latest = work["latest_run"] or "-"
+        print(
+            f"- {work['slug']} | {work['title']} | {work['genre']} | "
+            f"runs={work['run_count']} | latest={latest}"
+        )
+    return 0
+
+
+def cmd_list_runs(args: argparse.Namespace) -> int:
+    root = _workspace_root(args.workspace)
+    runs = discover_runs(workspace_root=root, work_slug=args.work)
+    if args.json:
+        print(json.dumps({"workspace": str(root), "work": args.work, "runs": runs}, ensure_ascii=False, indent=2))
+        return 0
+
+    if not runs:
+        print(f"no runs found for {args.work} under {root}")
+        return 0
+
+    print(f"work: {args.work}")
+    for run in runs:
+        next_stage = run["next_stage"] or "done"
+        print(
+            f"- {run['run_id']} | {run['kind']} | {run['status']} | "
+            f"pending={run['pending_stage_count']} | next={next_stage}"
+        )
+    return 0
+
+
+def cmd_portfolio_status(args: argparse.Namespace) -> int:
+    root = _workspace_root(args.workspace)
+    status = build_portfolio_status(workspace_root=root)
+    if args.output:
+        write_json(Path(args.output), status)
+        print(f"portfolio status written: {args.output}")
+        return 0
+    if args.json:
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"workspace: {status['workspace']}")
+    print(f"works: {status['work_count']} total, {status['active_work_count']} active")
+    if status["works_without_runs"]:
+        print("works without runs:")
+        for slug in status["works_without_runs"]:
+            print(f"- {slug}")
+    if status["works_with_pending_runs"]:
+        print("pending latest runs:")
+        for item in status["works_with_pending_runs"]:
+            print(f"- {item['slug']} | {item['latest_run']} | next={item['next_stage']}")
+    if not status["works_without_runs"] and not status["works_with_pending_runs"]:
+        print("all active works are either done or have no detected blocker")
+    return 0
+
+
+def cmd_inspect_text(args: argparse.Namespace) -> int:
+    result = inspect_text(Path(args.input))
+    payload = result.to_dict()
+    if args.output:
+        write_json(Path(args.output), payload)
+        print(f"inspection written: {args.output}")
+    else:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_report_skeleton(args: argparse.Namespace) -> int:
+    template_path = Path(args.template)
+    template = template_path.read_text(encoding="utf-8")
+    rendered = (
+        template.replace("{{work_slug}}", args.work)
+        .replace("{{run_id}}", args.run)
+        .replace("{{report_title}}", args.title)
+    )
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(rendered, encoding="utf-8")
+    print(f"report skeleton written: {output_path}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="novel-qc-loop")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init_work = subparsers.add_parser("init-work", help="create a multi-work workspace entry")
+    init_work.add_argument("--workspace", default="workspace")
+    init_work.add_argument("--slug", required=True)
+    init_work.add_argument("--title", required=True)
+    init_work.add_argument("--author", default="")
+    init_work.add_argument("--genre", default="")
+    init_work.add_argument("--audience", default="")
+    init_work.add_argument("--platform", default="")
+    init_work.add_argument("--source", default="")
+    init_work.add_argument("--note", action="append")
+    init_work.set_defaults(func=cmd_init_work)
+
+    start_run = subparsers.add_parser("start-run", help="create a run under a work")
+    start_run.add_argument("--workspace", default="workspace")
+    start_run.add_argument("--work", required=True)
+    start_run.add_argument("--kind", default="global-audit")
+    start_run.add_argument("--source", default="")
+    start_run.add_argument("--note", action="append")
+    start_run.set_defaults(func=cmd_start_run)
+
+    list_works = subparsers.add_parser("list-works", help="list works in the workspace")
+    list_works.add_argument("--workspace", default="workspace")
+    list_works.add_argument("--json", action="store_true")
+    list_works.set_defaults(func=cmd_list_works)
+
+    list_runs = subparsers.add_parser("list-runs", help="list runs for one work")
+    list_runs.add_argument("--workspace", default="workspace")
+    list_runs.add_argument("--work", required=True)
+    list_runs.add_argument("--json", action="store_true")
+    list_runs.set_defaults(func=cmd_list_runs)
+
+    portfolio = subparsers.add_parser("portfolio-status", help="summarize all work/runs")
+    portfolio.add_argument("--workspace", default="workspace")
+    portfolio.add_argument("--json", action="store_true")
+    portfolio.add_argument("--output")
+    portfolio.set_defaults(func=cmd_portfolio_status)
+
+    inspect = subparsers.add_parser("inspect-text", help="inspect text readability and chapter stats")
+    inspect.add_argument("--input", required=True)
+    inspect.add_argument("--output")
+    inspect.set_defaults(func=cmd_inspect_text)
+
+    skeleton = subparsers.add_parser("report-skeleton", help="render a markdown report skeleton")
+    skeleton.add_argument("--template", default="templates/report_global_audit.md")
+    skeleton.add_argument("--work", required=True)
+    skeleton.add_argument("--run", required=True)
+    skeleton.add_argument("--title", default="검수 보고서")
+    skeleton.add_argument("--output", required=True)
+    skeleton.set_defaults(func=cmd_report_skeleton)
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,13 @@
+[project]
+name = "novel-qc-loop"
+version = "0.1.0"
+description = "Multi-work webnovel quality-control and correction loop"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+novel-qc-loop = "novel_qc_loop.cli:main"
+
+[tool.ruff]
+line-length = 100
+

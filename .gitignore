@@ -1,0 +1,31 @@
+# Runtime workspaces: manuscripts, reports, exports, and private run data.
+workspace/*
+!workspace/.gitkeep
+runs/*
+!runs/.gitkeep
+
+# Local artifacts and source manuscripts.
+*.hwp
+*.hwpx
+*.pdf
+*.docx
+*.xlsx
+*.xls
+*.zip
+
+# Python.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local machine/editor.
+.env
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+

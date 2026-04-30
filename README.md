@@ -1,0 +1,77 @@
+# novel-qc-loop
+
+여러 웹소설 원고를 같은 기준으로 검수, 교정, 보고, export하기 위한 canonical 루프입니다.
+
+이 repo에는 **루프 엔진, 문서, 템플릿, 스키마**만 둡니다. 실제 원고, HWP/HWPX/PDF, 작가별 결과물은 `workspace/` 아래에 생성하고 기본적으로 git에 올리지 않습니다.
+
+## 목표
+
+- 여러 작품을 같은 검수 루프에 올릴 수 있게 한다.
+- 작품별 원고/리포트/교정안/export를 섞지 않는다.
+- `1차 전역 감리 -> 적대적 감리 -> human-facing 보고서 -> 교정안 -> 최종 export` 흐름을 표준화한다.
+- 다른 사람도 같은 폴더 규칙과 manifest만 알면 실행할 수 있게 한다.
+
+## 빠른 시작
+
+```powershell
+cd C:\Users\wjjo\Desktop\novel-qc-loop
+$env:PYTHONPATH = ".\src"
+python -m novel_qc_loop init-work --slug canaria --title "카나리아" --genre "현대판타지" --audience "3040" --platform "네이버 시리즈"
+python -m novel_qc_loop start-run --work canaria --kind global-audit
+python -m novel_qc_loop list-works
+python -m novel_qc_loop portfolio-status
+python -m novel_qc_loop inspect-text --input "C:\path\to\manuscript.txt"
+```
+
+## 기본 구조
+
+```text
+docs/                 운영 문서
+templates/            보고서/감리/교정 템플릿
+schemas/              manifest/issue/report JSON schema
+scripts/              현장 실행용 얇은 래퍼와 HWPX 도구
+src/novel_qc_loop/    재사용 가능한 루프 코드
+examples/anonymized/  익명 샘플만 허용
+workspace/            실제 작품별 작업 공간, git ignore
+runs/                 임시 전체 실행 로그, git ignore
+```
+
+## 작품 단위
+
+각 작품은 `workspace/{work_slug}` 아래에 독립적으로 생성됩니다.
+
+```text
+workspace/canaria/
+  manifest.json
+  inputs/
+  extracted/
+  runs/
+  reports/
+  corrections/
+  exports/
+  archive/
+```
+
+`manifest.json`에는 작품 제목, 장르, 대상 독자, 플랫폼, 원본 위치, 운영 메모를 둡니다. 원고 본문은 manifest에 넣지 않습니다.
+
+## 핵심 원칙
+
+- 원본 원고는 보존한다.
+- 자동 변환은 검수/리포트 보조에만 쓰고, 문장 의미를 바꾸는 교정은 사람이 확인한다.
+- 검수와 교정은 분리한다. 검수는 문제와 근거를 남기고, 교정은 변경안과 승인 상태를 남긴다.
+- 리포트는 내부용 raw 판정과 작가/편집자-facing 보고서를 분리한다.
+- HWPX 교정 표시는 파란색 변경 표기를 표준으로 둔다.
+
+## IDE-first
+
+이 루프의 기본 사용처는 IDE입니다. 원고, manifest, run, 리포트, 교정안을 한 repo 안에서 보고 AI 에이전트와 함께 반복합니다.
+
+추천 문서:
+
+- `docs/ide_first_operating_model.md`
+- `docs/repeatable_multi_work_loop.md`
+- `docs/promotion_polish.md`
+
+## 현재 이식된 레거시
+
+- `scripts/apply_blue.py`: HWPX 파란색 교정 표시 도구. 기존 `업무자동화_ssot/교정/scripts/apply_blue.py`에서 가져온다.

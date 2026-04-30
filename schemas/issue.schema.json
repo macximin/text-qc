@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QcIssue",
+  "type": "object",
+  "required": ["id", "severity", "category", "summary", "evidence", "recommendation"],
+  "properties": {
+    "id": { "type": "string" },
+    "severity": { "enum": ["P0", "P1", "P2"] },
+    "category": { "type": "string" },
+    "location": { "type": "string" },
+    "summary": { "type": "string" },
+    "evidence": { "type": "string" },
+    "reader_risk": { "type": "string" },
+    "recommendation": { "type": "string" },
+    "status": { "type": "string" }
+  },
+  "additionalProperties": false
+}
+

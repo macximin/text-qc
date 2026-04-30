@@ -1,0 +1,23 @@
+[
+  {
+    "id": "chg-0001",
+    "severity": "P2",
+    "status": "proposed",
+    "marker": "ⓐ",
+    "find": "원문",
+    "replace": "교정문",
+    "reason": "명백한 오탈자 또는 문법 오류",
+    "location": "ep_0001"
+  },
+  {
+    "id": "chg-0002",
+    "severity": "P2",
+    "status": "needs-author",
+    "marker": "ⓐⓐ",
+    "find": "원문",
+    "replace": "대안",
+    "reason": "문체/고유명사/작가 의도 확인 필요",
+    "location": "ep_0001"
+  }
+]
+

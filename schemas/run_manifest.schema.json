@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunManifest",
+  "type": "object",
+  "required": ["schema_version", "run_id", "work_slug", "kind", "created_at", "stages"],
+  "properties": {
+    "schema_version": { "const": "run_manifest.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "work_slug": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "minLength": 1 },
+    "status": { "type": "string" },
+    "created_at": { "type": "string" },
+    "source_text_path": { "type": "string" },
+    "stages": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
+
