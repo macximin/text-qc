@@ -60,10 +60,16 @@
       "properties": {
         "priority": { "enum": ["P0", "P1", "P2", "P3"] },
         "status": { "enum": ["확정", "유보", "기각", "confirmed", "deferred", "rejected"] },
+        "decision": { "enum": ["확정", "강등", "철회", "유보", "confirmed", "downgraded", "retracted", "deferred"] },
+        "confidence_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "original_priority": { "enum": ["P0", "P1", "P2", "P3"] },
+        "final_priority": { "enum": ["P0", "P1", "P2", "P3"] },
         "category": { "type": "string" },
         "claim": { "type": "string" },
         "rationale": { "type": "string" },
         "evidence": { "type": "string" },
+        "evidence_snippet": { "type": "string" },
+        "counter_evidence": { "type": "string" },
         "fix_hint": { "type": "string" },
         "reader_risk": { "type": "string" }
       },

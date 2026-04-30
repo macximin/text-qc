@@ -130,6 +130,7 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         findings = []
         issues.append({"field": "findings", "message": "must be an array"})
 
+    is_complete = payload.get("status") == "complete"
     for index, finding in enumerate(findings, start=1):
         if not isinstance(finding, dict):
             issues.append({"field": f"findings[{index}]", "message": "must be an object"})
@@ -137,6 +138,8 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         for required in ("priority", "status", "category", "claim", "rationale"):
             if not finding.get(required):
                 issues.append({"field": f"findings[{index}].{required}", "message": "required"})
+        if is_complete:
+            issues.extend(validate_finding_confidence_contract(finding, index))
 
     ready = (
         payload.get("status") == "complete"
@@ -159,6 +162,99 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         issue_count=len(issues),
         issues=issues,
     )
+
+
+def validate_finding_confidence_contract(finding: dict[str, Any], index: int) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    decision = normalize_decision(finding.get("decision") or finding.get("status"))
+    confidence = finding.get("confidence_percent")
+    has_evidence = bool(str(finding.get("evidence") or "").strip()) or bool(
+        str(finding.get("evidence_snippet") or "").strip()
+    )
+    has_counter = bool(str(finding.get("counter_evidence") or "").strip())
+
+    if confidence is not None:
+        if not isinstance(confidence, int) or not 0 <= confidence <= 100:
+            issues.append(
+                {
+                    "field": f"findings[{index}].confidence_percent",
+                    "message": "must be an integer from 0 to 100",
+                }
+            )
+
+    has_reaudit_fields = any(
+        field in finding
+        for field in (
+            "decision",
+            "confidence_percent",
+            "evidence_snippet",
+            "counter_evidence",
+            "original_priority",
+            "final_priority",
+        )
+    )
+    if not has_reaudit_fields:
+        return issues
+
+    if decision == "confirmed":
+        if confidence is None:
+            issues.append(
+                {
+                    "field": f"findings[{index}].confidence_percent",
+                    "message": "confirmed finding requires confidence_percent",
+                }
+            )
+        elif isinstance(confidence, int) and confidence < 95:
+            issues.append(
+                {
+                    "field": f"findings[{index}].confidence_percent",
+                    "message": "confirmed finding must be >= 95 for 95% confidence reports",
+                }
+            )
+        if not has_evidence:
+            issues.append(
+                {
+                    "field": f"findings[{index}].evidence",
+                    "message": "confirmed finding requires evidence or evidence_snippet",
+                }
+            )
+    elif decision == "downgraded":
+        for field in ("original_priority", "final_priority"):
+            if not finding.get(field):
+                issues.append({"field": f"findings[{index}].{field}", "message": "downgrade requires priority trace"})
+        if not has_counter:
+            issues.append(
+                {
+                    "field": f"findings[{index}].counter_evidence",
+                    "message": "downgrade requires counter_evidence or weakening reason",
+                }
+            )
+    elif decision == "retracted":
+        if not has_counter:
+            issues.append(
+                {
+                    "field": f"findings[{index}].counter_evidence",
+                    "message": "retraction requires counter_evidence",
+                }
+            )
+    return issues
+
+
+def normalize_decision(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    aliases = {
+        "확정": "confirmed",
+        "confirmed": "confirmed",
+        "강등": "downgraded",
+        "downgraded": "downgraded",
+        "철회": "retracted",
+        "기각": "retracted",
+        "retracted": "retracted",
+        "rejected": "retracted",
+        "유보": "deferred",
+        "deferred": "deferred",
+    }
+    return aliases.get(text, text)
 
 
 def write_submission_validation_result(result: SubmissionValidationResult, output_path: Path) -> None:

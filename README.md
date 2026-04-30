@@ -23,6 +23,10 @@ python -m novel_qc_loop analyze-run --run-root "workspace\sample-title\runs\RUN_
 python -m novel_qc_loop validate-changes --changes "workspace\sample-title\runs\RUN_ID\corrections\changes.json"
 python -m novel_qc_loop validate-submission --run-root "workspace\sample-title\runs\RUN_ID"
 python -m novel_qc_loop validate-report --run-root "workspace\sample-title\runs\RUN_ID"
+python -m novel_qc_loop render-reaudit-report --run-root "workspace\sample-title\runs\RUN_ID"
+python -m novel_qc_loop render-author-final-report --run-root "workspace\sample-title\runs\RUN_ID" --pdf
+python -m novel_qc_loop export-report-pdf --report "workspace\sample-title\runs\RUN_ID\human-facing\author_final_report.md"
+python -m novel_qc_loop inspect-epub-package --input "C:\path\to\epub_folder" --output-dir "workspace\sample-title\runs\RUN_ID\evidence\package"
 python -m novel_qc_loop list-works
 python -m novel_qc_loop portfolio-status
 python -m novel_qc_loop inspect-text --input "C:\path\to\manuscript.txt"
@@ -68,7 +72,7 @@ workspace/canaria/
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 ```
 
-지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwpx`, `.epub`입니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
+지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwpx`, `.epub` 및 EPUB 파일이 들어 있는 폴더입니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. EPUB 파일 또는 폴더를 넣으면 `evidence/package/epub_package_qc.*`에 언어, UUID 중복, 파일명 규칙 같은 패키지 QC도 함께 남깁니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
 
 하네스는 제목을 유추하고, 작품 폴더와 run 폴더를 만들고, 다음 산출물을 자동 생성합니다.
 
@@ -87,6 +91,8 @@ workspace/canaria/
 - `evidence/submission/submission_gate.json`
 - `evidence/submission/manual_review_queue.jsonl`
 - `evidence/submission/manual_review_submission.json`
+- `evidence/package/epub_package_qc.json`
+- `evidence/package/epub_package_qc.md`
 
 `ai_slop_signals.json`에는 "AI로 쓴 확률"처럼 읽히는 자동 추정치가 들어가지만, 이는 포렌식 판정이 아니라 반복 표현/문장 리듬/추상어 밀도 기반의 **AI 티 위험도**입니다. 같은 값은 `human-facing/one_page_report.md`의 `AI 티 점검` 섹션에도 자동 반영됩니다.
 
@@ -98,6 +104,31 @@ workspace/canaria/
 - 리포트는 내부용 raw 판정과 작가/편집자-facing 보고서를 분리한다.
 - 최종 보고서는 한국어 human-facing 문서여야 하며, 모든 핵심 판단에는 주장과 근거를 함께 둔다.
 - HWPX 교정 표시는 파란색 변경 표기를 표준으로 둔다.
+
+## 95% 재감리 보고서
+
+`manual_review_submission.json`의 findings에는 `decision`, `confidence_percent`, `evidence_snippet`, `counter_evidence`, `original_priority`, `final_priority`를 넣을 수 있습니다. `decision=확정` 항목은 95% 이상 확신과 근거가 있어야 완료 검증을 통과합니다. 감리 완료 후 아래 명령으로 작가/편집자-facing 재감리 보고서를 렌더링합니다.
+
+```powershell
+python -m novel_qc_loop render-reaudit-report --run-root "workspace\sample-title\runs\RUN_ID"
+```
+
+## 작가전달용 최종 보고서
+
+표 기반 재감리 요약이 아니라 항목별 상세 보고서가 필요하면 `render-author-final-report`를 사용합니다. 이 명령은 `manual_review_submission.json`의 findings를 바탕으로 `위치 -> 원문 근거 -> 문제 -> 근거 -> 해석 -> 수정 방향` 순서의 한국어 보고서를 생성합니다.
+
+```powershell
+python -m novel_qc_loop render-author-final-report --run-root "workspace\sample-title\runs\RUN_ID"
+python -m novel_qc_loop render-author-final-report --run-root "workspace\sample-title\runs\RUN_ID" --pdf
+```
+
+기본 출력은 `human-facing/author_final_report.md`입니다. `--pdf`를 붙이면 같은 위치에 PDF도 생성합니다. 별도 Markdown 보고서를 PDF로 변환할 때는 다음 명령을 씁니다.
+
+```powershell
+python -m novel_qc_loop export-report-pdf --report "workspace\sample-title\runs\RUN_ID\human-facing\author_final_report.md"
+```
+
+등급 렌더링은 보수 기준을 따릅니다. `final_priority`가 있으면 최종 등급을 우선 사용하고, `decision=강등` 또는 `counter_evidence`가 있는 항목은 방어 가능한 해석을 보고서의 `해석`에 함께 남깁니다. `decision=철회` 항목은 `final_priority`가 없으면 작가전달용 최종 이슈에서 제외합니다.
 
 ## IDE-first
 

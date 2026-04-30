@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .package_qc import collect_epub_paths, inspect_epub_packages, natural_path_sort_key, write_epub_package_qc
 from .submission import write_manual_review_scaffold
 from .workspace import create_run, create_work, decode_text_bytes, inspect_text, read_json, read_text_auto, safe_slug, write_json
 
@@ -85,6 +86,8 @@ class IntakeResult:
 
 
 def read_source_text(path: Path) -> str:
+    if path.is_dir():
+        return read_epub_collection_text(path)
     suffix = path.suffix.lower()
     if suffix in {".txt", ".text", ".md", ".markdown"}:
         return read_text_auto(path)
@@ -93,6 +96,34 @@ def read_source_text(path: Path) -> str:
     if suffix == ".epub":
         return read_epub_text(path)
     raise ValueError(f"unsupported input type: {path.suffix}")
+
+
+def read_epub_collection_text(path: Path) -> str:
+    epub_paths = collect_epub_paths(path)
+    if not epub_paths:
+        raise ValueError(f"EPUB files not found in folder: {path}")
+    parts = []
+    for index, epub_path in enumerate(epub_paths, start=1):
+        body = read_epub_text(epub_path).strip()
+        if not body:
+            continue
+        if not begins_with_chapter_marker(body):
+            body = f"{index}화\n{body}"
+        parts.append(body)
+    if not parts:
+        raise ValueError(f"EPUB body text not found in folder: {path}")
+    return "\n\n".join(parts)
+
+
+def begins_with_chapter_marker(text: str) -> bool:
+    head = "\n".join(text.splitlines()[:5])
+    return bool(
+        re.search(
+            r"(?m)^\s*(?:ⓚ\d{1,4}|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?))",
+            head,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def read_hwpx_text(path: Path) -> str:
@@ -360,7 +391,12 @@ def intake_manuscript(
     input_path = input_path.resolve()
     if not input_path.exists():
         raise FileNotFoundError(input_path)
-    if input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
+    is_epub_collection = input_path.is_dir()
+    if is_epub_collection and not any(
+        item.is_file() and item.suffix.lower() == ".epub" for item in input_path.iterdir()
+    ):
+        raise ValueError(f"unsupported input folder: {input_path}")
+    if not is_epub_collection and input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
         raise ValueError(f"unsupported input type: {input_path.suffix}")
 
     source_text = read_source_text(input_path)
@@ -380,8 +416,33 @@ def intake_manuscript(
 
     original_dir = work_root / "inputs" / "original"
     original_dir.mkdir(parents=True, exist_ok=True)
-    original_path = original_dir / input_path.name
-    shutil.copy2(input_path, original_path)
+    if input_path.is_dir():
+        collection_dir = original_dir / input_path.name
+        collection_dir.mkdir(parents=True, exist_ok=True)
+        copied_items = []
+        for item in collect_epub_paths(input_path):
+            destination = collection_dir / item.name
+            shutil.copy2(item, destination)
+            copied_items.append({"name": item.name, "path": str(destination), "size": destination.stat().st_size})
+        original_path = original_dir / "epub_collection_manifest.json"
+        epub_items = [
+            {"name": item.name, "path": str(item.resolve()), "size": item.stat().st_size}
+            for item in collect_epub_paths(input_path)
+        ]
+        write_json(
+            original_path,
+            {
+                "schema_version": "epub_collection_manifest.v1",
+                "source_folder": str(input_path),
+                "epub_count": len(epub_items),
+                "items": epub_items,
+                "copied_folder": str(collection_dir),
+                "copied_items": copied_items,
+            },
+        )
+    else:
+        original_path = original_dir / input_path.name
+        shutil.copy2(input_path, original_path)
 
     extracted_dir = work_root / "extracted"
     extracted_dir.mkdir(parents=True, exist_ok=True)
@@ -400,6 +461,10 @@ def intake_manuscript(
     inspection = inspect_text(extracted_text_path)
     write_json(run_root / "evidence" / "inspection.json", inspection.to_dict())
     manual_paths = write_manual_review_scaffold(run_root / "evidence" / "submission")
+    package_qc_paths: dict[str, Path] = {}
+    if input_path.is_dir() or input_path.suffix.lower() == ".epub":
+        package_qc = inspect_epub_packages(input_path)
+        package_qc_paths = write_epub_package_qc(package_qc, run_root / "evidence" / "package")
 
     values = {
         "title": inferred_title,
@@ -456,6 +521,9 @@ def intake_manuscript(
         "manual_review_submission_path": str(manual_paths["submission_path"]),
         "final_manuscript_path": str(final_manuscript_path),
     }
+    if package_qc_paths:
+        run_manifest["artifacts"]["epub_package_qc_json_path"] = str(package_qc_paths["json_path"])
+        run_manifest["artifacts"]["epub_package_qc_markdown_path"] = str(package_qc_paths["markdown_path"])
     write_json(run_manifest_path, run_manifest)
 
     return IntakeResult(
@@ -486,10 +554,13 @@ def intake_inbox(
         return []
 
     results: list[IntakeResult] = []
-    for path in sorted(inbox_root.iterdir()):
-        if not path.is_file() or path.name.startswith("."):
+    for path in sorted(inbox_root.iterdir(), key=natural_path_sort_key):
+        if path.name.startswith("."):
             continue
-        if path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
+        if path.is_dir():
+            if not any(item.is_file() and item.suffix.lower() == ".epub" for item in path.iterdir()):
+                continue
+        elif not path.is_file() or path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
             continue
         results.append(
             intake_manuscript(

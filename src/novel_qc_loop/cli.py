@@ -8,7 +8,14 @@ from typing import Any
 from .analyze import analyze_run
 from .corrections import validate_changes_file, write_validation_result
 from .intake import intake_inbox, intake_manuscript
-from .reports import validate_human_report, write_report_validation_result
+from .package_qc import inspect_epub_packages, write_epub_package_qc
+from .reports import (
+    export_markdown_to_pdf,
+    render_author_final_report,
+    render_reaudit_report,
+    validate_human_report,
+    write_report_validation_result,
+)
 from .submission import validate_manual_review_submission, write_submission_validation_result
 from .workspace import (
     build_portfolio_status,
@@ -122,6 +129,134 @@ def cmd_validate_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render_reaudit_report(args: argparse.Namespace) -> int:
+    run_root = Path(args.run_root).resolve()
+    submission_path = (
+        Path(args.submission).resolve()
+        if args.submission
+        else run_root / "evidence" / "submission" / "manual_review_submission.json"
+    )
+    submission_validation = validate_manual_review_submission(submission_path)
+    validation_output = submission_path.with_name("manual_review_validation.json")
+    write_submission_validation_result(submission_validation, validation_output)
+    if not submission_validation.ready_for_submission and not args.allow_incomplete:
+        print(json.dumps(submission_validation.to_dict(), ensure_ascii=False, indent=2))
+        print("manual review submission is not ready; use --allow-incomplete to render a draft")
+        return 1
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else run_root / "human-facing" / "reaudit_report.md"
+    )
+    manifest_path = run_root / "run_manifest.json"
+    work_title = args.title
+    source_label = args.source_label
+    if manifest_path.exists():
+        manifest = read_json(manifest_path)
+        if not source_label:
+            source_label = str(manifest.get("source_text_path") or "")
+        if not work_title:
+            work_title = f"{manifest.get('work_slug', '작품')} 95% 재감리 보고서"
+    render_reaudit_report(
+        submission_path=submission_path,
+        output_path=output_path,
+        title=work_title,
+        source_label=source_label,
+    )
+    validation = validate_human_report(output_path).to_dict()
+    write_report_validation_result(
+        validate_human_report(output_path),
+        output_path.with_name("reaudit_report_validation.json"),
+    )
+    refresh_submission_gate_reaudit(
+        run_root,
+        str(output_path),
+        validation,
+        submission_path=submission_path,
+        submission_validation=submission_validation.to_dict(),
+    )
+    print(f"reaudit report written: {output_path}")
+    print(json.dumps(validation, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_render_author_final_report(args: argparse.Namespace) -> int:
+    run_root = Path(args.run_root).resolve()
+    submission_path = (
+        Path(args.submission).resolve()
+        if args.submission
+        else run_root / "evidence" / "submission" / "manual_review_submission.json"
+    )
+    submission_validation = validate_manual_review_submission(submission_path)
+    validation_output = submission_path.with_name("manual_review_validation.json")
+    write_submission_validation_result(submission_validation, validation_output)
+    if not submission_validation.ready_for_submission and not args.allow_incomplete:
+        print(json.dumps(submission_validation.to_dict(), ensure_ascii=False, indent=2))
+        print("manual review submission is not ready; use --allow-incomplete to render a draft")
+        return 1
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else run_root / "human-facing" / "author_final_report.md"
+    )
+    manifest_path = run_root / "run_manifest.json"
+    work_title = args.title
+    source_label = args.source_label
+    if manifest_path.exists():
+        manifest = read_json(manifest_path)
+        if not source_label:
+            source_label = str(manifest.get("source_text_path") or "")
+        if not work_title:
+            work_title = f"{manifest.get('work_slug', '작품')} 작가전달용 최종검수보고서"
+    render_author_final_report(
+        submission_path=submission_path,
+        output_path=output_path,
+        title=work_title,
+        source_label=source_label,
+    )
+    validation_result = validate_human_report(output_path)
+    validation = validation_result.to_dict()
+    write_report_validation_result(validation_result, output_path.with_name("author_final_report_validation.json"))
+    pdf_path = None
+    if args.pdf:
+        pdf_path = Path(args.pdf).resolve() if isinstance(args.pdf, str) else output_path.with_suffix(".pdf")
+        export_markdown_to_pdf(output_path, pdf_path)
+    refresh_submission_gate_author_final(
+        run_root,
+        str(output_path),
+        validation,
+        pdf_path=str(pdf_path) if pdf_path else "",
+        submission_path=submission_path,
+        submission_validation=submission_validation.to_dict(),
+    )
+    print(f"author final report written: {output_path}")
+    if pdf_path:
+        print(f"author final report PDF written: {pdf_path}")
+    print(json.dumps(validation, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_export_report_pdf(args: argparse.Namespace) -> int:
+    report_path = Path(args.report).resolve()
+    output_path = Path(args.output).resolve() if args.output else report_path.with_suffix(".pdf")
+    export_markdown_to_pdf(report_path, output_path)
+    print(f"PDF written: {output_path}")
+    return 0
+
+
+def cmd_inspect_epub_package(args: argparse.Namespace) -> int:
+    input_path = Path(args.input).resolve()
+    try:
+        payload = inspect_epub_packages(input_path)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
+    output_dir = Path(args.output_dir).resolve() if args.output_dir else (input_path if input_path.is_dir() else input_path.parent)
+    paths = write_epub_package_qc(payload, output_dir)
+    print(json.dumps({"summary": payload["summary"], "findings": payload["findings"], "outputs": {key: str(value) for key, value in paths.items()}}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
     gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
     gate_exists = gate_path.exists()
@@ -170,6 +305,82 @@ def refresh_submission_gate_report(run_root: Path, validation: dict[str, Any]) -
     if not validation.get("ready_for_delivery"):
         blockers.append("human_report_not_claim_evidence_ready")
     gate["human_report"] = validation
+    gate["blockers"] = sorted(set(blockers))
+    gate["ready_for_submission"] = not gate["blockers"]
+    gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
+    write_json(gate_path, gate)
+
+
+def refresh_submission_gate_reaudit(
+    run_root: Path,
+    report_path: str,
+    validation: dict[str, Any],
+    *,
+    submission_path: Path | None = None,
+    submission_validation: dict[str, Any] | None = None,
+) -> None:
+    gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
+    gate_exists = gate_path.exists()
+    gate = read_json(gate_path) if gate_exists else {"schema_version": "submission_gate.v1"}
+    gate["reaudit_report"] = {
+        "path": report_path,
+        "validation": validation,
+    }
+    blockers = [str(item) for item in gate.get("blockers", [])]
+    blockers = [
+        item
+        for item in blockers
+        if item not in {"reaudit_report_missing", "reaudit_report_not_claim_evidence_ready"}
+    ]
+    if not validation.get("ready_for_delivery"):
+        blockers.append("reaudit_report_not_claim_evidence_ready")
+    manual_path = submission_path or run_root / "evidence" / "submission" / "manual_review_submission.json"
+    if manual_path.exists():
+        manual_validation = submission_validation or validate_manual_review_submission(manual_path).to_dict()
+        manual_validation = {**manual_validation, "path": str(manual_path)}
+        gate["manual_review"] = manual_validation
+        blockers = [item for item in blockers if item != "manual_review_not_complete"]
+        if not manual_validation.get("ready_for_submission"):
+            blockers.append("manual_review_not_complete")
+    gate["blockers"] = sorted(set(blockers))
+    gate["ready_for_submission"] = not gate["blockers"]
+    gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
+    write_json(gate_path, gate)
+
+
+def refresh_submission_gate_author_final(
+    run_root: Path,
+    report_path: str,
+    validation: dict[str, Any],
+    *,
+    pdf_path: str = "",
+    submission_path: Path | None = None,
+    submission_validation: dict[str, Any] | None = None,
+) -> None:
+    gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
+    gate_exists = gate_path.exists()
+    gate = read_json(gate_path) if gate_exists else {"schema_version": "submission_gate.v1"}
+    gate["author_final_report"] = {
+        "path": report_path,
+        "pdf_path": pdf_path,
+        "validation": validation,
+    }
+    blockers = [str(item) for item in gate.get("blockers", [])]
+    blockers = [
+        item
+        for item in blockers
+        if item not in {"author_final_report_missing", "author_final_report_not_claim_evidence_ready"}
+    ]
+    if not validation.get("ready_for_delivery"):
+        blockers.append("author_final_report_not_claim_evidence_ready")
+    manual_path = submission_path or run_root / "evidence" / "submission" / "manual_review_submission.json"
+    if manual_path.exists():
+        manual_validation = submission_validation or validate_manual_review_submission(manual_path).to_dict()
+        manual_validation = {**manual_validation, "path": str(manual_path)}
+        gate["manual_review"] = manual_validation
+        blockers = [item for item in blockers if item != "manual_review_not_complete"]
+        if not manual_validation.get("ready_for_submission"):
+            blockers.append("manual_review_not_complete")
     gate["blockers"] = sorted(set(blockers))
     gate["ready_for_submission"] = not gate["blockers"]
     gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
@@ -372,6 +583,44 @@ def build_parser() -> argparse.ArgumentParser:
     validate_report.add_argument("--run-root")
     validate_report.add_argument("--output")
     validate_report.set_defaults(func=cmd_validate_report)
+
+    render_reaudit = subparsers.add_parser("render-reaudit-report", help="render a 95%% confidence re-audit report")
+    render_reaudit.add_argument("--run-root", required=True)
+    render_reaudit.add_argument("--submission")
+    render_reaudit.add_argument("--output")
+    render_reaudit.add_argument("--title", default="")
+    render_reaudit.add_argument("--source-label", default="")
+    render_reaudit.add_argument("--allow-incomplete", action="store_true")
+    render_reaudit.set_defaults(func=cmd_render_reaudit_report)
+
+    render_author = subparsers.add_parser(
+        "render-author-final-report",
+        help="render a detailed author/editor-facing final QC report",
+    )
+    render_author.add_argument("--run-root", required=True)
+    render_author.add_argument("--submission")
+    render_author.add_argument("--output")
+    render_author.add_argument("--title", default="")
+    render_author.add_argument("--source-label", default="")
+    render_author.add_argument(
+        "--pdf",
+        nargs="?",
+        const=True,
+        default=False,
+        help="also export PDF; optionally provide the PDF output path",
+    )
+    render_author.add_argument("--allow-incomplete", action="store_true")
+    render_author.set_defaults(func=cmd_render_author_final_report)
+
+    export_pdf = subparsers.add_parser("export-report-pdf", help="export a Markdown report to PDF")
+    export_pdf.add_argument("--report", required=True)
+    export_pdf.add_argument("--output")
+    export_pdf.set_defaults(func=cmd_export_report_pdf)
+
+    epub_package = subparsers.add_parser("inspect-epub-package", help="inspect EPUB package metadata")
+    epub_package.add_argument("--input", required=True)
+    epub_package.add_argument("--output-dir")
+    epub_package.set_defaults(func=cmd_inspect_epub_package)
 
     mark_stage = subparsers.add_parser("mark-stage", help="update one run stage status")
     mark_stage.add_argument("--run-root", required=True)
