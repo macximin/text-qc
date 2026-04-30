@@ -12,6 +12,7 @@ runs/*
 # Local artifacts and source manuscripts.
 *.hwp
 *.hwpx
+*.epub
 *.pdf
 *.docx
 *.xlsx

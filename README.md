@@ -67,7 +67,7 @@ workspace/canaria/
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 ```
 
-지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwpx`입니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
+지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwpx`, `.epub`입니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
 
 하네스는 제목을 유추하고, 작품 폴더와 run 폴더를 만들고, 다음 산출물을 자동 생성합니다.
 

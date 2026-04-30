@@ -21,6 +21,7 @@
 - `.md`
 - `.markdown`
 - `.hwpx` (`Preview/PrvText.txt` 우선, 없으면 HWPX XML 본문 fallback)
+- `.epub` (OPF spine 기준 본문 XHTML만 추출, metadata/nav/toc/cover는 제외)
 
 텍스트 인코딩은 UTF-8/UTF-8 BOM/CP949/EUC-KR/UTF-16 계열을 자동 감지합니다.
 

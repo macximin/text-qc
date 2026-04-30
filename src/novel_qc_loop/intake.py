@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import posixpath
 import re
 import shutil
 import zipfile
 from html import unescape
+from urllib.parse import unquote
+from xml.etree import ElementTree as ET
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -12,7 +15,45 @@ from .submission import write_manual_review_scaffold
 from .workspace import create_run, create_work, decode_text_bytes, inspect_text, read_json, read_text_auto, safe_slug, write_json
 
 
-SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwpx"}
+SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwpx", ".epub"}
+EPUB_BODY_MEDIA_TYPES = {"application/xhtml+xml", "text/html", "application/xml", "text/xml"}
+EPUB_NON_BODY_HINTS = {
+    "cover",
+    "copyright",
+    "landmarks",
+    "nav",
+    "navigation",
+    "notes",
+    "titlepage",
+    "title-page",
+    "toc",
+}
+EPUB_BLOCK_TAGS = {
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "br",
+    "div",
+    "figcaption",
+    "figure",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "li",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "td",
+    "th",
+    "tr",
+}
+EPUB_SKIP_TAGS = {"head", "script", "style", "svg", "nav", "header", "footer", "aside"}
 GENERIC_TITLE_HINTS = {
     "0",
     "0_합본",
@@ -49,6 +90,8 @@ def read_source_text(path: Path) -> str:
         return read_text_auto(path)
     if suffix == ".hwpx":
         return read_hwpx_text(path)
+    if suffix == ".epub":
+        return read_epub_text(path)
     raise ValueError(f"unsupported input type: {path.suffix}")
 
 
@@ -65,6 +108,156 @@ def read_hwpx_text(path: Path) -> str:
         if text_parts:
             return "\n".join(part.strip() for part in text_parts if part.strip())
     raise ValueError(f"HWPX text not found: {path}")
+
+
+def read_epub_text(path: Path) -> str:
+    with zipfile.ZipFile(path, "r") as archive:
+        opf_path = find_epub_opf_path(archive)
+        manifest, spine = read_epub_manifest_and_spine(archive, opf_path)
+        body_paths = select_epub_body_paths(manifest, spine, strict=True)
+        if not body_paths:
+            body_paths = select_epub_body_paths(manifest, spine, strict=False)
+
+        text_parts = []
+        for item_path in body_paths:
+            if item_path not in archive.namelist():
+                continue
+            doc_text = extract_body_text(decode_text_bytes(archive.read(item_path)))
+            if doc_text:
+                text_parts.append(doc_text)
+
+        if text_parts:
+            return "\n\n".join(text_parts)
+    raise ValueError(f"EPUB body text not found: {path}")
+
+
+def find_epub_opf_path(archive: zipfile.ZipFile) -> str:
+    names = archive.namelist()
+    if "META-INF/container.xml" in names:
+        container = ET.fromstring(archive.read("META-INF/container.xml"))
+        for elem in container.iter():
+            if local_name(elem.tag) == "rootfile":
+                full_path = elem.attrib.get("full-path")
+                if full_path:
+                    return full_path
+    for name in names:
+        if name.lower().endswith(".opf"):
+            return name
+    raise ValueError("EPUB OPF package file not found")
+
+
+def read_epub_manifest_and_spine(archive: zipfile.ZipFile, opf_path: str) -> tuple[dict[str, dict[str, str]], list[str]]:
+    package = ET.fromstring(archive.read(opf_path))
+    opf_dir = posixpath.dirname(opf_path)
+    manifest: dict[str, dict[str, str]] = {}
+    spine: list[str] = []
+    for elem in package.iter():
+        tag = local_name(elem.tag)
+        if tag == "item":
+            item_id = elem.attrib.get("id")
+            href = elem.attrib.get("href")
+            if not item_id or not href:
+                continue
+            manifest[item_id] = {
+                "href": epub_join(opf_dir, href),
+                "media_type": elem.attrib.get("media-type", ""),
+                "properties": elem.attrib.get("properties", ""),
+                "id": item_id,
+            }
+        elif tag == "itemref":
+            idref = elem.attrib.get("idref")
+            if idref:
+                spine.append(idref)
+    return manifest, spine
+
+
+def select_epub_body_paths(manifest: dict[str, dict[str, str]], spine: list[str], *, strict: bool) -> list[str]:
+    paths: list[str] = []
+    for idref in spine:
+        item = manifest.get(idref)
+        if not item:
+            continue
+        media_type = item.get("media_type", "")
+        if media_type and media_type not in EPUB_BODY_MEDIA_TYPES:
+            continue
+        if "nav" in item.get("properties", "").split():
+            continue
+        href = item.get("href", "")
+        if strict and is_epub_non_body_path(href, item.get("id", "")):
+            continue
+        paths.append(href)
+    return paths
+
+
+def is_epub_non_body_path(href: str, item_id: str) -> bool:
+    target = f"{href}/{item_id}".lower()
+    stem = Path(unquote(posixpath.basename(href))).stem.lower()
+    return stem in EPUB_NON_BODY_HINTS or any(f"/{hint}" in target or f"{hint}." in target for hint in EPUB_NON_BODY_HINTS)
+
+
+def epub_join(base_dir: str, href: str) -> str:
+    clean_href = unquote(href.split("#", 1)[0])
+    return posixpath.normpath(posixpath.join(base_dir, clean_href))
+
+
+def extract_body_text(document: str) -> str:
+    try:
+        root = ET.fromstring(document.encode("utf-8"))
+        body = first_descendant(root, "body")
+        if body is None:
+            return ""
+        chunks: list[str] = []
+        append_element_text(body, chunks)
+        return normalize_extracted_text("".join(chunks))
+    except ET.ParseError:
+        return extract_body_text_fallback(document)
+
+
+def first_descendant(root: ET.Element, tag_name: str) -> ET.Element | None:
+    for elem in root.iter():
+        if local_name(elem.tag) == tag_name:
+            return elem
+    return None
+
+
+def append_element_text(elem: ET.Element, chunks: list[str]) -> None:
+    tag = local_name(elem.tag)
+    if tag in EPUB_SKIP_TAGS:
+        return
+    if tag in EPUB_BLOCK_TAGS:
+        chunks.append("\n")
+    if elem.text:
+        chunks.append(elem.text)
+    for child in list(elem):
+        append_element_text(child, chunks)
+        if child.tail:
+            chunks.append(child.tail)
+    if tag in EPUB_BLOCK_TAGS:
+        chunks.append("\n")
+
+
+def extract_body_text_fallback(document: str) -> str:
+    match = re.search(r"<body\b[^>]*>(.*?)</body>", document, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return ""
+    body = match.group(1)
+    body = re.sub(r"<(?:script|style|nav|header|footer|aside)\b.*?</(?:script|style|nav|header|footer|aside)>", "", body, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"<(?:p|div|section|article|h[1-6]|li|br|tr|td|th|blockquote)\b[^>]*>", "\n", body, flags=re.IGNORECASE)
+    body = re.sub(r"<[^>]+>", "", body)
+    return normalize_extracted_text(body)
+
+
+def normalize_extracted_text(text: str) -> str:
+    lines = []
+    for line in unescape(text).splitlines():
+        cleaned = re.sub(r"\s+", " ", line).strip()
+        if cleaned:
+            lines.append(cleaned)
+    return "\n".join(lines)
+
+
+def local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
 
 
 def infer_title(path: Path, text: str) -> str:
