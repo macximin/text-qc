@@ -8,8 +8,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .reports import validate_human_report
+from .narrative import classify_bracketed_line
+from .reports import require_completed_manual_review, validate_human_report
 from .submission import validate_manual_review_submission, write_manual_review_scaffold
+from .verisimilitude import extract_verisimilitude_candidates
 from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
 
 
@@ -82,7 +84,6 @@ GENERIC_HYGIENE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("slash_swap_marker", re.compile(r"/[^/\n]{1,80}\([^)\n]{1,80}\)/")),
     ("html_entity", re.compile(r"&(?:nbsp|lt|gt|amp|quot|apos|#\d+);")),
     ("markdown_header", re.compile(r"(?m)^#{1,6}\s+\S+")),
-    ("stage_cue", re.compile(r"(?m)^\[[^\]\n]{1,160}\]\s*$")),
     ("strike_marker", re.compile(r"<s>.*?</s>|~~[^~]+~~")),
     ("correction_marker", re.compile(r"ⓐⓐ?\{[^|{}]*\|[^{}]*\}")),
 )
@@ -150,7 +151,9 @@ class AnalysisResult:
     era_candidates_path: str
     timeline_summary_path: str
     character_title_matrix_path: str
+    verisimilitude_candidates_path: str
     hygiene_flags_path: str
+    narrative_allowances_path: str
     ai_slop_path: str
     replay_candidates_path: str
     bridge_candidates_path: str
@@ -236,8 +239,13 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     write_json(timeline_summary_path, build_timeline_summary(chapters, date_rows, time_rows, relative_time_rows))
     write_json(character_title_matrix_path, build_character_title_matrix(title_rows, kin_title_rows))
 
+    verisimilitude_candidates_path = review_dir / "verisimilitude_candidates.jsonl"
+    write_jsonl(verisimilitude_candidates_path, extract_verisimilitude_candidates(chapters))
+
     hygiene_flags_path = review_dir / "hygiene_flags.jsonl"
     write_jsonl(hygiene_flags_path, extract_hygiene_flags(chapters))
+    narrative_allowances_path = review_dir / "narrative_allowances.jsonl"
+    write_jsonl(narrative_allowances_path, extract_narrative_allowances(chapters))
 
     ai_slop_path = review_dir / "ai_slop_signals.json"
     ai_slop_summary = build_ai_slop_summary(text)
@@ -259,7 +267,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         submission_gate_path,
         build_submission_gate(
             inspection=inspection.to_dict(),
+            verisimilitude_candidates_path=verisimilitude_candidates_path,
             hygiene_flags_path=hygiene_flags_path,
+            narrative_allowances_path=narrative_allowances_path,
             replay_candidates_path=replay_candidates_path,
             bridge_candidates_path=bridge_candidates_path,
             era_candidates_path=era_candidates_path,
@@ -290,7 +300,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             "era_candidates_path": str(era_candidates_path),
             "timeline_summary_path": str(timeline_summary_path),
             "character_title_matrix_path": str(character_title_matrix_path),
+            "verisimilitude_candidates_path": str(verisimilitude_candidates_path),
             "hygiene_flags_path": str(hygiene_flags_path),
+            "narrative_allowances_path": str(narrative_allowances_path),
             "ai_slop_path": str(ai_slop_path),
             "replay_candidates_path": str(replay_candidates_path),
             "bridge_candidates_path": str(bridge_candidates_path),
@@ -324,7 +336,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         era_candidates_path=str(era_candidates_path),
         timeline_summary_path=str(timeline_summary_path),
         character_title_matrix_path=str(character_title_matrix_path),
+        verisimilitude_candidates_path=str(verisimilitude_candidates_path),
         hygiene_flags_path=str(hygiene_flags_path),
+        narrative_allowances_path=str(narrative_allowances_path),
         ai_slop_path=str(ai_slop_path),
         replay_candidates_path=str(replay_candidates_path),
         bridge_candidates_path=str(bridge_candidates_path),
@@ -507,7 +521,8 @@ def extract_hygiene_flags(chapters: list[dict[str, Any]]) -> list[dict[str, Any]
     rows = []
     for chapter in chapters:
         lines = str(chapter["text"]).splitlines()
-        for line_no, line in enumerate(lines, start=1):
+        for index, line in enumerate(lines):
+            line_no = index + 1
             for kind, pattern in GENERIC_HYGIENE_PATTERNS:
                 if pattern.search(line):
                     rows.append(
@@ -518,6 +533,43 @@ def extract_hygiene_flags(chapters: list[dict[str, Any]]) -> list[dict[str, Any]
                             "context": html.unescape(line.strip())[:260],
                         }
                     )
+            bracketed = classify_bracketed_line(lines, index)
+            if bracketed and bracketed.get("blocks_submission"):
+                rows.append(
+                    {
+                        "kind": "stage_cue",
+                        "episode": chapter["episode"],
+                        "line": line_no,
+                        "context": html.unescape(line.strip())[:260],
+                        "classification": bracketed.get("classification", ""),
+                        "confidence": bracketed.get("confidence", ""),
+                        "reason": bracketed.get("reason", ""),
+                        "matched_terms": bracketed.get("matched_terms", []),
+                    }
+                )
+    return rows
+
+
+def extract_narrative_allowances(chapters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for chapter in chapters:
+        lines = str(chapter["text"]).splitlines()
+        for index, line in enumerate(lines):
+            bracketed = classify_bracketed_line(lines, index)
+            if not bracketed or bracketed.get("blocks_submission"):
+                continue
+            rows.append(
+                {
+                    "kind": "narrative_allowance",
+                    "episode": chapter["episode"],
+                    "line": index + 1,
+                    "context": html.unescape(line.strip())[:260],
+                    "classification": bracketed.get("classification", ""),
+                    "confidence": bracketed.get("confidence", ""),
+                    "reason": bracketed.get("reason", ""),
+                    "matched_terms": bracketed.get("matched_terms", []),
+                }
+            )
     return rows
 
 
@@ -916,7 +968,9 @@ def normalize_signal_lines(lines: list[str]) -> list[str]:
 def build_submission_gate(
     *,
     inspection: dict[str, Any],
+    verisimilitude_candidates_path: Path,
     hygiene_flags_path: Path,
+    narrative_allowances_path: Path,
     replay_candidates_path: Path,
     bridge_candidates_path: Path,
     era_candidates_path: Path,
@@ -924,7 +978,9 @@ def build_submission_gate(
     human_report_path: Path,
     manual_review_submission_path: Path,
 ) -> dict[str, Any]:
+    verisimilitude_summary = summarize_verisimilitude_candidates(verisimilitude_candidates_path)
     hygiene_count = count_jsonl_rows(hygiene_flags_path)
+    narrative_allowance_count = count_jsonl_rows(narrative_allowances_path)
     replay_count = count_jsonl_rows(replay_candidates_path)
     bridge_count = count_jsonl_rows(bridge_candidates_path)
     era_count = count_jsonl_rows(era_candidates_path)
@@ -947,7 +1003,10 @@ def build_submission_gate(
     if not manual_ready:
         blockers.append("manual_review_not_complete")
     if human_report_path.exists():
-        human_report = validate_human_report(human_report_path).to_dict()
+        human_report = require_completed_manual_review(
+            validate_human_report(human_report_path),
+            manual_review,
+        ).to_dict()
         if not human_report.get("ready_for_delivery"):
             blockers.append("human_report_not_claim_evidence_ready")
     else:
@@ -957,7 +1016,23 @@ def build_submission_gate(
         "ready_for_submission": not blockers,
         "status": "blocked" if blockers else "ready",
         "blockers": blockers,
+        "priority_policy": {
+            "primary_axis": "verisimilitude_continuity",
+            "summary": "작중 행동/상태/인과 연속성을 외부 고증 후보보다 우선합니다.",
+            "external_fact_rule": (
+                "날짜/요일/영업일 같은 외부 고증은 작중 상태 충돌이나 독자 이해 붕괴를 만들 때만 P0/P1 후보입니다."
+            ),
+        },
+        "verisimilitude_candidate_count": verisimilitude_summary["total_count"],
+        "verisimilitude_conflict_candidate_count": verisimilitude_summary["conflict_count"],
+        "verisimilitude_checkpoint_count": verisimilitude_summary["checkpoint_count"],
         "hygiene_flag_count": hygiene_count,
+        "narrative_allowance_count": narrative_allowance_count,
+        "stage_cue_candidates": inspection.get("stage_cue_candidates", 0),
+        "stage_cues_allowed_by_narrative_context": inspection.get(
+            "stage_cues_allowed_by_narrative_context",
+            0,
+        ),
         "replay_candidate_count": replay_count,
         "bridge_candidate_count": bridge_count,
         "era_candidate_count": era_count,
@@ -982,6 +1057,25 @@ def build_submission_gate(
     if human_report is not None:
         payload["human_report"] = human_report
     return payload
+
+
+def summarize_verisimilitude_candidates(path: Path) -> dict[str, int]:
+    summary = {"total_count": 0, "conflict_count": 0, "checkpoint_count": 0}
+    if not path.exists():
+        return summary
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        summary["total_count"] += 1
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("kind") == "possible_internal_action_conflict":
+            summary["conflict_count"] += 1
+        elif row.get("kind") == "state_trace_checkpoint":
+            summary["checkpoint_count"] += 1
+    return summary
 
 
 def count_jsonl_rows(path: Path) -> int:

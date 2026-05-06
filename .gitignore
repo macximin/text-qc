@@ -10,6 +10,11 @@ runs/*
 !runs/.gitkeep
 
 # Local artifacts and source manuscripts.
+초기 원고(input)/*
+!초기 원고(input)/.gitkeep
+최종 원고(output)/*
+!최종 원고(output)/.gitkeep
+
 *.hwp
 *.hwpx
 *.epub

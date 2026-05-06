@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import RunManifest, TextInspection, WorkManifest
+from .narrative import classify_bracketed_lines
 
 
 WORK_SUBDIRS = ("inputs", "extracted", "runs", "reports", "corrections", "exports", "archive")
@@ -26,6 +27,7 @@ RUN_SUBDIRS = (
 )
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
 CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(\d{1,4})\s*$")
+HASH_NUMBER_CHAPTER_RE = re.compile(r"(?m)^#(?P<num>\d{1,4})(?:\s+(?P<title>[^\n]+))?\s*$")
 MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
 NUMBERED_CHAPTER_RE = re.compile(
     r"(?im)^\s*(?:제\s*)?(?P<num>\d{1,4})\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
@@ -244,6 +246,18 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
             for match in marker_matches
         ]
 
+    hash_number_matches = list(HASH_NUMBER_CHAPTER_RE.finditer(text))
+    if hash_number_matches:
+        return [
+            {
+                "episode": match.group("num").zfill(3),
+                "title": (match.group("title") or "").strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in hash_number_matches
+        ]
+
     markdown_matches = list(MARKDOWN_HEADER_RE.finditer(text))
     if markdown_matches:
         return [
@@ -285,6 +299,9 @@ def inspect_text(path: Path) -> TextInspection:
     nonempty = [line for line in lines if line.strip()]
     lengths = [len(line) for line in nonempty]
     chapter_markers = find_chapter_markers(text)
+    bracketed_rows = classify_bracketed_lines(text)
+    blocking_stage_cues = [row for row in bracketed_rows if row.get("blocks_submission")]
+    allowed_stage_cues = [row for row in bracketed_rows if not row.get("blocks_submission")]
     chapter_chars: dict[str, int] = {}
     if chapter_markers:
         for idx, marker in enumerate(chapter_markers):
@@ -307,7 +324,9 @@ def inspect_text(path: Path) -> TextInspection:
         bang_count=text.count("!"),
         question_count=text.count("?"),
         markdown_headers=len(re.findall(r"(?m)^#{1,6}\s+", text)),
-        stage_cues=len(re.findall(r"(?m)^\[[^\]\n]{1,160}\]\s*$", text)),
+        stage_cues=len(blocking_stage_cues),
+        stage_cue_candidates=len(bracketed_rows),
+        stage_cues_allowed_by_narrative_context=len(allowed_stage_cues),
         chapter_count=len(chapter_markers),
         chapter_chars_no_space=chapter_chars,
     )

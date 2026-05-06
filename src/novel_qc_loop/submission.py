@@ -37,7 +37,11 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
                     "axis": axis["axis"],
                     "label": axis["label"],
                     "status": "pending",
-                    "required_evidence": "episode/line/evidence/rationale/fix_hint",
+                    "required_evidence": (
+                        "episode/line/evidence/rationale/counter_evidence/"
+                        "story_state_before/story_state_after/story_internal_impact/"
+                        "decision/confidence_percent/final_priority/fix_hint"
+                    ),
                 }
             )
     return rows
@@ -70,7 +74,28 @@ def write_manual_review_scaffold(submission_dir: Path) -> dict[str, Path]:
     write_jsonl(queue_path, build_manual_review_queue())
     if not submission_path.exists():
         write_json(submission_path, build_empty_manual_review_submission())
+    else:
+        merge_missing_review_axes(submission_path)
     return {"queue_path": queue_path, "submission_path": submission_path}
+
+
+def merge_missing_review_axes(submission_path: Path) -> None:
+    try:
+        payload = json.loads(submission_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return
+    checked_axes = payload.get("checked_axes")
+    if not isinstance(checked_axes, list):
+        return
+    seen = {str(item.get("axis") or "") for item in checked_axes if isinstance(item, dict)}
+    changed = False
+    for item in REVIEW_AXES:
+        if item["axis"] in seen:
+            continue
+        checked_axes.append({"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""})
+        changed = True
+    if changed:
+        write_json(submission_path, payload)
 
 
 def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
@@ -139,6 +164,7 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
             if not finding.get(required):
                 issues.append({"field": f"findings[{index}].{required}", "message": "required"})
         if is_complete:
+            issues.extend(validate_complete_finding_contract(finding, index))
             issues.extend(validate_finding_confidence_contract(finding, index))
 
     ready = (
@@ -174,7 +200,7 @@ def validate_finding_confidence_contract(finding: dict[str, Any], index: int) ->
     has_counter = bool(str(finding.get("counter_evidence") or "").strip())
 
     if confidence is not None:
-        if not isinstance(confidence, int) or not 0 <= confidence <= 100:
+        if isinstance(confidence, bool) or not isinstance(confidence, int) or not 0 <= confidence <= 100:
             issues.append(
                 {
                     "field": f"findings[{index}].confidence_percent",
@@ -236,7 +262,100 @@ def validate_finding_confidence_contract(finding: dict[str, Any], index: int) ->
                     "field": f"findings[{index}].counter_evidence",
                     "message": "retraction requires counter_evidence",
                 }
+        )
+    return issues
+
+
+def validate_complete_finding_contract(finding: dict[str, Any], index: int) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    decision = normalize_decision(finding.get("decision") or finding.get("status"))
+    initial_priority = normalize_priority(finding.get("original_priority") or finding.get("priority"))
+    final_priority = normalize_priority(finding.get("final_priority") or finding.get("priority"))
+    confidence = finding.get("confidence_percent")
+    category = str(finding.get("category") or "").strip().lower()
+    has_evidence = bool(str(finding.get("evidence") or "").strip()) or bool(
+        str(finding.get("evidence_snippet") or "").strip()
+    )
+    has_counter = bool(str(finding.get("counter_evidence") or "").strip())
+    has_internal_impact = any(
+        str(finding.get(field) or "").strip()
+        for field in ("story_internal_impact", "story_state_before", "story_state_after")
+    )
+
+    for required in ("decision", "confidence_percent", "final_priority", "fix_hint", "reader_risk"):
+        if finding.get(required) in (None, ""):
+            issues.append(
+                {
+                    "field": f"findings[{index}].{required}",
+                    "message": "complete review finding requires final triage fields",
+                }
             )
+
+    if final_priority in {"P0", "P1"}:
+        if decision != "confirmed":
+            issues.append(
+                {
+                    "field": f"findings[{index}].decision",
+                    "message": "P0/P1 must be confirmed after final review",
+                }
+            )
+        if isinstance(confidence, bool) or not isinstance(confidence, int) or confidence < 95:
+            issues.append(
+                {
+                    "field": f"findings[{index}].confidence_percent",
+                    "message": "P0/P1 requires >= 95 confidence",
+                }
+            )
+        if not has_evidence:
+            issues.append(
+                {
+                    "field": f"findings[{index}].evidence",
+                    "message": "P0/P1 requires direct evidence or evidence_snippet",
+                }
+            )
+        if has_counter:
+            issues.append(
+                {
+                    "field": f"findings[{index}].counter_evidence",
+                    "message": "P0/P1 cannot keep unresolved counter_evidence; downgrade to P2/P3 or retract",
+                }
+            )
+        if not has_internal_impact:
+            issues.append(
+                {
+                    "field": f"findings[{index}].story_internal_impact",
+                    "message": "P0/P1 requires story-internal plausibility impact, not just external fact checking",
+                }
+            )
+        if is_external_fact_category(category) and not str(finding.get("story_internal_impact") or "").strip():
+            issues.append(
+                {
+                    "field": f"findings[{index}].story_internal_impact",
+                    "message": "external fact findings need clear story-internal impact to remain P0/P1",
+                }
+            )
+
+    if has_counter and final_priority in {"P0", "P1"}:
+        issues.append(
+            {
+                "field": f"findings[{index}].final_priority",
+                "message": "findings with defensible counter_evidence must not remain P0/P1",
+            }
+        )
+    if decision in {"downgraded", "retracted", "deferred"} and final_priority in {"P0", "P1"}:
+        issues.append(
+            {
+                "field": f"findings[{index}].final_priority",
+                "message": "downgraded/retracted/deferred findings must be P2/P3 or omitted from final report",
+            }
+        )
+    if decision == "downgraded" and priority_rank(final_priority) <= priority_rank(initial_priority):
+        issues.append(
+            {
+                "field": f"findings[{index}].final_priority",
+                "message": "downgrade requires final_priority to be lower severity than original_priority/priority",
+            }
+        )
     return issues
 
 
@@ -255,6 +374,33 @@ def normalize_decision(value: Any) -> str:
         "deferred": "deferred",
     }
     return aliases.get(text, text)
+
+
+def normalize_priority(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    return text if text in {"P0", "P1", "P2", "P3"} else "P3"
+
+
+def is_external_fact_category(category: str) -> bool:
+    return any(
+        term in category
+        for term in (
+            "era",
+            "external",
+            "calendar",
+            "weekday",
+            "bank",
+            "holiday",
+            "고증",
+            "외부",
+            "달력",
+            "영업일",
+        )
+    )
+
+
+def priority_rank(value: str) -> int:
+    return {"P0": 0, "P1": 1, "P2": 2, "P3": 3}.get(value, 3)
 
 
 def write_submission_validation_result(result: SubmissionValidationResult, output_path: Path) -> None:

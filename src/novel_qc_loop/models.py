@@ -59,6 +59,8 @@ class TextInspection:
     question_count: int
     markdown_headers: int
     stage_cues: int
+    stage_cue_candidates: int
+    stage_cues_allowed_by_narrative_context: int
     chapter_count: int
     chapter_chars_no_space: dict[str, int]
 
@@ -68,4 +70,3 @@ class TextInspection:
 
 def path_as_str(path: str | Path) -> str:
     return str(Path(path))
-

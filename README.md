@@ -87,6 +87,8 @@ workspace/canaria/
 - `evidence/facts/timeline_summary.json`
 - `evidence/facts/character_title_matrix.json`
 - `evidence/review/*.jsonl`
+- `evidence/review/verisimilitude_candidates.jsonl`
+- `evidence/review/narrative_allowances.jsonl`
 - `evidence/review/ai_slop_signals.json`
 - `evidence/submission/submission_gate.json`
 - `evidence/submission/manual_review_queue.jsonl`
@@ -96,6 +98,8 @@ workspace/canaria/
 
 `ai_slop_signals.json`에는 "AI로 쓴 확률"처럼 읽히는 자동 추정치가 들어가지만, 이는 포렌식 판정이 아니라 반복 표현/문장 리듬/추상어 밀도 기반의 **AI 티 위험도**입니다. 같은 값은 `human-facing/one_page_report.md`의 `AI 티 점검` 섹션에도 자동 반영됩니다.
 
+하네스는 자동 후보를 곧바로 확정 오류로 보지 않습니다. 다만 우선순위는 외부 고증보다 작중 핍진성에 둡니다. `오늘 했다`고 쓴 행동이 뒤에서 `오늘 하지 않았다`로 뒤집히거나, 완료된 사건/정산/권한 상태가 원인 없이 회귀하는 문제를 가장 먼저 봅니다. 날짜/요일/은행 영업일 같은 외부 고증은 작중 행동 결과를 흔들 때만 강한 이슈가 됩니다. 작중 뉴스 자막, 로이터/블룸버그 단말기 문구, 문서/보고서 표기, 장르적 과장처럼 소설적 허용으로 방어 가능한 항목은 blocker에서 제외하고 `evidence/review/narrative_allowances.jsonl`에 근거를 남깁니다.
+
 ## 핵심 원칙
 
 - 원본 원고는 보존한다.
@@ -103,11 +107,14 @@ workspace/canaria/
 - 검수와 교정은 분리한다. 검수는 문제와 근거를 남기고, 교정은 변경안과 승인 상태를 남긴다.
 - 리포트는 내부용 raw 판정과 작가/편집자-facing 보고서를 분리한다.
 - 최종 보고서는 한국어 human-facing 문서여야 하며, 모든 핵심 판단에는 주장과 근거를 함께 둔다.
+- 최종 보고서는 `manual_review_submission.json` 감리 완료와 `validate-submission` 통과 전에는 제출 가능 상태가 될 수 없다.
+- P0/P1은 최종 감리에서 확정, 확신도 95% 이상, 직접 근거 있음, 미해결 반례 없음, 작중 핍진성 영향이 모두 충족된 항목만 사용한다.
+- 외부 고증 후보는 작중 행동·상태·인과를 깨뜨리는 경우와 단순 보강 후보를 분리한다.
 - HWPX 교정 표시는 파란색 변경 표기를 표준으로 둔다.
 
 ## 95% 재감리 보고서
 
-`manual_review_submission.json`의 findings에는 `decision`, `confidence_percent`, `evidence_snippet`, `counter_evidence`, `original_priority`, `final_priority`를 넣을 수 있습니다. `decision=확정` 항목은 95% 이상 확신과 근거가 있어야 완료 검증을 통과합니다. 감리 완료 후 아래 명령으로 작가/편집자-facing 재감리 보고서를 렌더링합니다.
+`manual_review_submission.json`의 findings에는 `decision`, `confidence_percent`, `evidence_snippet`, `counter_evidence`, `original_priority`, `final_priority`, `story_state_before`, `story_state_after`, `story_internal_impact`를 넣을 수 있습니다. `status=complete` 제출에서는 이 최종 감리 필드가 필수입니다. P0/P1은 `decision=확정`, 95% 이상 확신, 직접 근거, 미해결 반례 없음, 작중 핍진성 영향이 모두 맞아야 완료 검증을 통과합니다. 반례나 장면상 방어가 남은 항목은 P2/P3로 낮추거나 철회/유보해야 합니다. 감리 완료 후 아래 명령으로 작가/편집자-facing 재감리 보고서를 렌더링합니다.
 
 ```powershell
 python -m novel_qc_loop render-reaudit-report --run-root "workspace\sample-title\runs\RUN_ID"
@@ -128,7 +135,7 @@ python -m novel_qc_loop render-author-final-report --run-root "workspace\sample-
 python -m novel_qc_loop export-report-pdf --report "workspace\sample-title\runs\RUN_ID\human-facing\author_final_report.md"
 ```
 
-등급 렌더링은 보수 기준을 따릅니다. `final_priority`가 있으면 최종 등급을 우선 사용하고, `decision=강등` 또는 `counter_evidence`가 있는 항목은 방어 가능한 해석을 보고서의 `해석`에 함께 남깁니다. `decision=철회` 항목은 `final_priority`가 없으면 작가전달용 최종 이슈에서 제외합니다.
+등급 렌더링은 보수 기준을 따릅니다. `final_priority`가 있으면 최종 등급을 우선 사용하고, `decision=강등` 또는 `counter_evidence`가 있는 항목은 방어 가능한 해석을 보고서의 `해석`에 함께 남깁니다. P0/P1은 확정 항목만 포함하고, `decision=철회` 또는 `decision=유보` 항목은 작가전달용 최종 이슈에서 제외합니다.
 
 ## IDE-first
 

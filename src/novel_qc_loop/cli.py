@@ -13,6 +13,7 @@ from .reports import (
     export_markdown_to_pdf,
     render_author_final_report,
     render_reaudit_report,
+    require_completed_manual_review,
     validate_human_report,
     write_report_validation_result,
 )
@@ -115,14 +116,21 @@ def cmd_validate_report(args: argparse.Namespace) -> int:
         report_path = run_root / "human-facing" / "one_page_report.md"
         default_output = run_root / "human-facing" / "report_validation.json"
     else:
+        run_root = None
         report_path = Path(args.report).resolve()
         default_output = report_path.with_name("report_validation.json")
     result = validate_human_report(report_path)
+    manual_validation: dict[str, Any] | None = None
+    if args.run_root:
+        manual_path = run_root / "evidence" / "submission" / "manual_review_submission.json"
+        if manual_path.exists():
+            manual_validation = validate_manual_review_submission(manual_path).to_dict()
+        result = require_completed_manual_review(result, manual_validation)
     if args.output or args.run_root:
         output_path = Path(args.output).resolve() if args.output else default_output
         write_report_validation_result(result, output_path)
         if args.run_root:
-            refresh_submission_gate_report(run_root, result.to_dict())
+            refresh_submission_gate_report(run_root, result.to_dict(), manual_validation=manual_validation)
         print(f"human report validation written: {output_path}")
         return 0
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
@@ -163,11 +171,12 @@ def cmd_render_reaudit_report(args: argparse.Namespace) -> int:
         title=work_title,
         source_label=source_label,
     )
-    validation = validate_human_report(output_path).to_dict()
-    write_report_validation_result(
+    validation_result = require_completed_manual_review(
         validate_human_report(output_path),
-        output_path.with_name("reaudit_report_validation.json"),
+        submission_validation.to_dict(),
     )
+    validation = validation_result.to_dict()
+    write_report_validation_result(validation_result, output_path.with_name("reaudit_report_validation.json"))
     refresh_submission_gate_reaudit(
         run_root,
         str(output_path),
@@ -214,7 +223,10 @@ def cmd_render_author_final_report(args: argparse.Namespace) -> int:
         title=work_title,
         source_label=source_label,
     )
-    validation_result = validate_human_report(output_path)
+    validation_result = require_completed_manual_review(
+        validate_human_report(output_path),
+        submission_validation.to_dict(),
+    )
     validation = validation_result.to_dict()
     write_report_validation_result(validation_result, output_path.with_name("author_final_report_validation.json"))
     pdf_path = None
@@ -279,7 +291,10 @@ def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
         blockers.append("manual_review_not_complete")
     report_path = run_root / "human-facing" / "one_page_report.md"
     if report_path.exists():
-        report_validation = validate_human_report(report_path).to_dict()
+        report_validation = require_completed_manual_review(
+            validate_human_report(report_path),
+            validation,
+        ).to_dict()
         gate["human_report"] = report_validation
         if not report_validation.get("ready_for_delivery"):
             blockers.append("human_report_not_claim_evidence_ready")
@@ -290,7 +305,12 @@ def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
     write_json(gate_path, gate)
 
 
-def refresh_submission_gate_report(run_root: Path, validation: dict[str, Any]) -> None:
+def refresh_submission_gate_report(
+    run_root: Path,
+    validation: dict[str, Any],
+    *,
+    manual_validation: dict[str, Any] | None = None,
+) -> None:
     gate_path = run_root / "evidence" / "submission" / "submission_gate.json"
     gate_exists = gate_path.exists()
     gate = read_json(gate_path) if gate_exists else {"schema_version": "submission_gate.v1"}
@@ -304,6 +324,16 @@ def refresh_submission_gate_report(run_root: Path, validation: dict[str, Any]) -
         blockers.append("evidence_not_generated")
     if not validation.get("ready_for_delivery"):
         blockers.append("human_report_not_claim_evidence_ready")
+    manual_path = run_root / "evidence" / "submission" / "manual_review_submission.json"
+    if manual_path.exists():
+        manual_validation = manual_validation or validate_manual_review_submission(manual_path).to_dict()
+        manual_validation = {**manual_validation, "path": str(manual_path)}
+        gate["manual_review"] = manual_validation
+        blockers = [item for item in blockers if item != "manual_review_not_complete"]
+        if not manual_validation.get("ready_for_submission"):
+            blockers.append("manual_review_not_complete")
+    else:
+        blockers.append("manual_review_not_complete")
     gate["human_report"] = validation
     gate["blockers"] = sorted(set(blockers))
     gate["ready_for_submission"] = not gate["blockers"]

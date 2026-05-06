@@ -43,6 +43,62 @@
     "final_summary": { "type": "string" }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "complete" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "items": {
+              "allOf": [
+                {
+                  "required": ["decision", "confidence_percent", "final_priority", "fix_hint", "reader_risk"]
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "final_priority": { "enum": ["P0", "P1"] }
+                    },
+                    "required": ["final_priority"]
+                  },
+                  "then": {
+                    "properties": {
+                      "decision": { "enum": ["확정", "confirmed"] },
+                      "confidence_percent": { "type": "integer", "minimum": 95, "maximum": 100 }
+                    },
+                    "anyOf": [
+                      { "required": ["evidence"], "properties": { "evidence": { "type": "string", "minLength": 1 } } },
+                      { "required": ["evidence_snippet"], "properties": { "evidence_snippet": { "type": "string", "minLength": 1 } } }
+                    ],
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          { "required": ["story_internal_impact"], "properties": { "story_internal_impact": { "type": "string", "minLength": 1 } } },
+                          { "required": ["story_state_before"], "properties": { "story_state_before": { "type": "string", "minLength": 1 } } },
+                          { "required": ["story_state_after"], "properties": { "story_state_after": { "type": "string", "minLength": 1 } } }
+                        ]
+                      }
+                    ],
+                    "not": {
+                      "required": ["counter_evidence"],
+                      "properties": {
+                        "counter_evidence": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "pass_result": {
       "type": "object",
@@ -70,6 +126,9 @@
         "evidence": { "type": "string" },
         "evidence_snippet": { "type": "string" },
         "counter_evidence": { "type": "string" },
+        "story_state_before": { "type": "string" },
+        "story_state_after": { "type": "string" },
+        "story_internal_impact": { "type": "string" },
         "fix_hint": { "type": "string" },
         "reader_risk": { "type": "string" }
       },

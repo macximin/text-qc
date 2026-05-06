@@ -98,6 +98,33 @@ def validate_human_report(path: Path) -> ReportValidationResult:
     )
 
 
+def require_completed_manual_review(
+    result: ReportValidationResult,
+    manual_validation: dict[str, Any] | None,
+) -> ReportValidationResult:
+    issues = list(result.issues)
+    if (
+        (not manual_validation or not manual_validation.get("ready_for_submission"))
+        and not any(issue.get("code") == "manual_review_not_complete" for issue in issues)
+    ):
+        issues.append(
+            {
+                "code": "manual_review_not_complete",
+                "line": None,
+                "message": "보고서 제출 전 3-pass 수동 감리 제출 파일이 완료/검증되어야 합니다.",
+            }
+        )
+    return ReportValidationResult(
+        path=result.path,
+        ready_for_delivery=not issues,
+        issue_count=len(issues),
+        claim_evidence_pair_count=result.claim_evidence_pair_count,
+        korean_ratio=result.korean_ratio,
+        hangul_count=result.hangul_count,
+        issues=issues,
+    )
+
+
 def calculate_korean_stats(text: str) -> dict[str, Any]:
     stripped = strip_markdown_noise(text)
     hangul_count = len(re.findall(r"[가-힣]", stripped))
@@ -303,7 +330,10 @@ def render_author_final_report(
 
 def should_include_author_finding(finding: dict[str, Any]) -> bool:
     decision = normalize_report_decision(finding.get("decision") or finding.get("status"))
-    if decision == "retracted" and not finding.get("final_priority"):
+    if decision in {"retracted", "deferred"}:
+        return False
+    priority = effective_priority(finding)
+    if priority in {"P0", "P1"} and decision != "confirmed":
         return False
     return bool(str(finding.get("claim") or "").strip())
 
@@ -330,12 +360,12 @@ def build_author_final_report_markdown(
             "",
             "이 보고서는 작가님과 편집자가 바로 수정 판단을 할 수 있도록, 발견 사항을 `위치`, `원문 근거`, `문제`, `근거`, `해석`, `수정 방향` 순서로 정리했습니다.",
             "",
-            "대체 해석이나 장면상 방어가 가능한 항목은 P0/P1로 올리지 않고 P2 또는 P3 보강 권고로 낮춰 적습니다.",
+            "대체 해석이나 장면상 방어가 가능한 항목은 P0/P1로 올리지 않고 P2 또는 P3 보강 권고로 낮춰 적습니다. P0/P1은 최종 감리에서 확정, 확신도 95% 이상, 미해결 반례 없음, 작중 핍진성 영향이 모두 충족된 항목만 사용합니다.",
             "",
             "| 등급 | 의미 |",
             "|---|---|",
-            "| P0 | 방어 여지가 거의 없는 핵심 모순입니다. 같은 사건의 정산값이 직접 충돌하거나 주요 승부 장면이 중복 실행되는 수준입니다. |",
-            "| P1 | 작품 신뢰도를 크게 흔드는 하드 고증/설정 오류입니다. 날짜, 요일, 금융 제도, 인물 기본정보처럼 독자가 쉽게 확인할 수 있고 대체 해석이 약한 정보입니다. |",
+            "| P0 | 방어 여지가 거의 없는 작중 핵심 모순입니다. 오늘 한 행동을 뒤에서 안 했다고 하거나, 완료된 사건/승부/정산이 원인 없이 되감기는 수준입니다. |",
+            "| P1 | 작품 신뢰도를 크게 흔드는 내부 연속성 오류입니다. 시간, 자금, 권한, 관계, 사건 상태가 앞뒤 장면에서 충돌해 독자의 이해가 깨지는 항목입니다. 외부 고증은 작중 결과를 흔들 때만 여기에 둡니다. |",
             "| P2 | 장면 연결, 명칭, 소품, 자금 흐름 보강이 필요한 항목입니다. 한 항목만으로 치명적이지는 않지만 누적되면 완성도를 떨어뜨립니다. |",
             "| P3 | 주의, 교정, 표현, 패키징 정리 항목입니다. 빠르게 고칠 수 있고 납품 전 정리하면 좋은 문제입니다. |",
             "",
