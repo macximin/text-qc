@@ -75,6 +75,7 @@
 - `adversarial-audit`: 독자/심사자 관점 3회 감리.
 - `ai-slop-scan`: 특정 장르 취향을 강제하지 않고 AI 티, 반복 표현, 말투 균질화를 점검.
 - `correction-pass`: `ⓐ`/`ⓐⓐ` 교정안 생성.
+- `editorial-pass`: 적극 편집자 모드. replace/delete/insert_before/insert_after 기반 윤문, 중복 삭제, 브리지 추가. HWP/HWPX 대신 text 후보본과 Markdown diff를 사용.
 - `export-pass`: PDF/HWPX/HTML 산출과 확인.
 
 ## 자동 evidence 생성

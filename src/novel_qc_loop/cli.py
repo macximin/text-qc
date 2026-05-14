@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .analyze import analyze_run
-from .corrections import validate_changes_file, write_validation_result
+from .corrections import apply_changes_to_text_file, validate_changes_file, write_validation_result
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
 from .reports import (
@@ -80,6 +80,57 @@ def cmd_validate_changes(args: argparse.Namespace) -> int:
         write_validation_result(result, Path(args.output))
         print(f"correction validation written: {args.output}")
         return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_apply_changes_text(args: argparse.Namespace) -> int:
+    if not args.run_root and not (args.source and args.changes):
+        raise SystemExit("use --run-root or provide both --source and --changes")
+
+    run_root = Path(args.run_root).resolve() if args.run_root else None
+    source_path = (
+        Path(args.source).resolve()
+        if args.source
+        else run_root / "final_manuscript" / "final_manuscript.txt"
+    )
+    changes_path = (
+        Path(args.changes).resolve()
+        if args.changes
+        else run_root / "corrections" / "changes.json"
+    )
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else (
+            run_root / "final_manuscript" / "editorial_candidate.txt"
+            if run_root
+            else source_path.with_name(source_path.stem + ".edited" + source_path.suffix)
+        )
+    )
+    diff_path = (
+        Path(args.diff_output).resolve()
+        if args.diff_output
+        else (
+            run_root / "corrections" / "editorial_diff.md"
+            if run_root
+            else output_path.with_suffix(".diff.md")
+        )
+    )
+
+    validation = validate_changes_file(changes_path)
+    if validation.invalid:
+        print(json.dumps(validation.to_dict(), ensure_ascii=False, indent=2))
+        print("changes file is invalid; fix it before applying to text")
+        return 1
+
+    result = apply_changes_to_text_file(
+        source_path=source_path,
+        changes_path=changes_path,
+        output_path=output_path,
+        diff_path=diff_path,
+        accept_aa=args.accept_aa,
+    )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -602,6 +653,18 @@ def build_parser() -> argparse.ArgumentParser:
     validate_changes.add_argument("--output")
     validate_changes.set_defaults(func=cmd_validate_changes)
 
+    apply_text = subparsers.add_parser(
+        "apply-changes-text",
+        help="apply changes JSON to plain text and write an editorial candidate plus Markdown diff",
+    )
+    apply_text.add_argument("--run-root", help="run folder; defaults paths under final_manuscript/ and corrections/")
+    apply_text.add_argument("--source", help="source text path; default: RUN/final_manuscript/final_manuscript.txt")
+    apply_text.add_argument("--changes", help="changes JSON path; default: RUN/corrections/changes.json")
+    apply_text.add_argument("--output", help="output text path; default: RUN/final_manuscript/editorial_candidate.txt")
+    apply_text.add_argument("--diff-output", help="Markdown diff path; default: RUN/corrections/editorial_diff.md")
+    apply_text.add_argument("--accept-aa", action="store_true", help="apply ⓐⓐ changes too")
+    apply_text.set_defaults(func=cmd_apply_changes_text)
+
     validate_submission = subparsers.add_parser("validate-submission", help="validate manual review submission JSON")
     validate_submission.add_argument("--submission")
     validate_submission.add_argument("--run-root")
@@ -664,7 +727,11 @@ def build_parser() -> argparse.ArgumentParser:
     intake.add_argument("--input", required=True)
     intake.add_argument("--workspace", default="workspace")
     intake.add_argument("--templates", default=str(_repo_root() / "templates"))
-    intake.add_argument("--mode", default="full", choices=["audit", "correction", "full", "검수", "교정", "전체"])
+    intake.add_argument(
+        "--mode",
+        default="full",
+        choices=["audit", "correction", "editor", "editorial", "full", "검수", "교정", "편집", "편집자", "전체"],
+    )
     intake.add_argument("--title", default="")
     intake.add_argument("--slug", default="")
     intake.add_argument("--author", default="")
@@ -679,7 +746,11 @@ def build_parser() -> argparse.ArgumentParser:
     intake_box.add_argument("--inbox", default="inbox/initial_manuscripts")
     intake_box.add_argument("--workspace", default="workspace")
     intake_box.add_argument("--templates", default=str(_repo_root() / "templates"))
-    intake_box.add_argument("--mode", default="full", choices=["audit", "correction", "full", "검수", "교정", "전체"])
+    intake_box.add_argument(
+        "--mode",
+        default="full",
+        choices=["audit", "correction", "editor", "editorial", "full", "검수", "교정", "편집", "편집자", "전체"],
+    )
     intake_box.add_argument("--genre", default="")
     intake_box.add_argument("--audience", default="")
     intake_box.add_argument("--platform", default="")

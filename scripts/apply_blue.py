@@ -14,9 +14,10 @@ HWPX 파란색 수정 표시 스크립트
 
 changes.json 형식:
   [
-    {"find": "반증", "replace": "방증", "marker": "ⓐ"},      # 확정 교정 - ⓐ{반증|방증} 삽입, 방증만 파랑
-    {"find": "오랜만", "replace": "오래간만", "marker": "ⓐⓐ"}, # 작가 판단 - ⓐⓐ{오랜만|오래간만} 삽입, 오래간만만 파랑
-    {"find": "반증", "replace": "방증"}                       # 마커 없이 - 방증만 파랑으로 단순 교체
+    {"operation": "replace", "find": "반증", "replace": "방증", "marker": "ⓐ"},
+    {"operation": "delete", "find": "반복 문장", "replace": "", "marker": "ⓐⓐ"},
+    {"operation": "insert_after", "find": "앵커 문장.", "replace": " 추가 문장.", "marker": "ⓐⓐ"},
+    {"find": "반증", "replace": "방증"}  # operation 생략 시 replace, replace가 빈 문자열이면 delete
   ]
 """
 
@@ -26,13 +27,48 @@ import json
 import argparse
 import os
 import sys
+from html import escape as xml_escape
+from xml.etree import ElementTree as ET
+
+
+SECTION_RE = re.compile(r'^Contents/section(\d+)\.xml$')
+ALLOWED_OPERATIONS = {"replace", "delete", "insert_before", "insert_after"}
+
+
+def section_sort_key(name):
+    match = SECTION_RE.match(name)
+    return int(match.group(1)) if match else 0
+
+
+def get_section_names(files):
+    """HWPX 본문 section XML 목록을 문서 순서대로 반환."""
+    names = [name for name in files if SECTION_RE.match(name)]
+    return sorted(names, key=section_sort_key)
 
 
 def read_hwpx_text(filepath):
-    """HWPX에서 텍스트 미리보기 추출"""
+    """HWPX 본문 section 전체에서 텍스트 추출."""
     with zipfile.ZipFile(filepath, 'r') as z:
-        with z.open('Preview/PrvText.txt') as f:
-            return f.read().decode('utf-8', errors='ignore')
+        names = sorted(
+            [name for name in z.namelist() if SECTION_RE.match(name)],
+            key=section_sort_key,
+        )
+        paragraphs = []
+        for name in names:
+            root = ET.fromstring(z.read(name))
+            for elem in root.iter():
+                if elem.tag.endswith('}p') or elem.tag == 'p':
+                    text = ''.join(elem.itertext()).strip()
+                    if text:
+                        paragraphs.append(text)
+        if paragraphs:
+            return '\n'.join(paragraphs)
+
+        if "Preview/PrvText.txt" in z.namelist():
+            with z.open('Preview/PrvText.txt') as f:
+                return f.read().decode('utf-8', errors='ignore')
+
+    return ""
 
 
 def read_all_files(filepath):
@@ -106,6 +142,7 @@ def apply_change(section_xml, change, blue_id):
     change 딕셔너리 형식:
       - find (필수): 원문에서 찾을 텍스트
       - replace (필수): 교정된 텍스트
+      - operation (선택): replace/delete/insert_before/insert_after
       - marker (선택): "ⓐ" 또는 "ⓐⓐ" — 지정 시 본문에 ⓐ{원문|교정} 마커 삽입
                       (교정문 부분만 파란색, 마커와 원문 부분은 검정)
                       미지정 시 기존 동작: 교정문만 파란색으로 단순 교체
@@ -115,6 +152,12 @@ def apply_change(section_xml, change, blue_id):
     find_text = change['find']
     replace_text = change['replace']
     marker = change.get('marker', '')
+    operation = change.get('operation') or ('delete' if replace_text == '' else 'replace')
+    if operation not in ALLOWED_OPERATIONS:
+        return section_xml, False
+
+    safe_find_text = xml_escape(find_text, quote=False)
+    safe_replace_text = xml_escape(replace_text, quote=False)
 
     run_pattern = re.compile(r'<hp:run charPrIDRef="(\d+)"><hp:t>([^<]*)</hp:t></hp:run>')
 
@@ -130,7 +173,7 @@ def apply_change(section_xml, change, blue_id):
             continue
         if 'ⓐ{' in text or 'ⓐⓐ{' in text:
             continue
-        if text.startswith('}'):
+        if text == '}':
             continue
 
         idx = text.find(find_text)
@@ -138,22 +181,41 @@ def apply_change(section_xml, change, blue_id):
             continue
 
         before = text[:idx]
+        anchor = text[idx:idx + len(find_text)]
         after = text[idx + len(find_text):]
 
-        if marker:
+        if operation in {'replace', 'delete'} and marker:
             # 마커 모드: "ⓐ{원문|" (검정) + "교정문" (파랑) + "}" (검정)
-            full_before = before + f'{marker}{{{find_text}|'
-            blue_part = replace_text
+            full_before = before + f'{marker}{{{safe_find_text}|'
+            blue_part = safe_replace_text
             full_after = '}' + after
+        elif operation in {'replace', 'delete'}:
+            full_before = before
+            blue_part = safe_replace_text
+            full_after = after
+        elif operation == 'insert_after' and marker:
+            # 추가 마커: "앵커ⓐ{|" (검정) + "추가문" (파랑) + "}" (검정)
+            full_before = before + anchor + f'{marker}{{|'
+            blue_part = safe_replace_text
+            full_after = '}' + after
+        elif operation == 'insert_after':
+            full_before = before + anchor
+            blue_part = safe_replace_text
+            full_after = after
+        elif operation == 'insert_before' and marker:
+            full_before = before + f'{marker}{{|'
+            blue_part = safe_replace_text
+            full_after = '}' + anchor + after
         else:
             full_before = before
-            blue_part = replace_text
-            full_after = after
+            blue_part = safe_replace_text
+            full_after = anchor + after
 
         parts = []
         if full_before:
             parts.append(f'<hp:run charPrIDRef="{base_id}"><hp:t>{full_before}</hp:t></hp:run>')
-        parts.append(f'<hp:run charPrIDRef="{blue_id}"><hp:t>{blue_part}</hp:t></hp:run>')
+        if blue_part or marker:
+            parts.append(f'<hp:run charPrIDRef="{blue_id}"><hp:t>{blue_part}</hp:t></hp:run>')
         if full_after:
             parts.append(f'<hp:run charPrIDRef="{base_id}"><hp:t>{full_after}</hp:t></hp:run>')
 
@@ -166,8 +228,18 @@ def apply_change(section_xml, change, blue_id):
 
 def save_hwpx(files, output_path):
     """파일 딕셔너리를 HWPX(ZIP)로 저장"""
+    section_count = len(get_section_names(files))
+    if section_count and 'Contents/header.xml' in files:
+        header_xml = files['Contents/header.xml'].decode('utf-8')
+        header_xml = re.sub(r'secCnt="\d+"', f'secCnt="{section_count}"', header_xml, count=1)
+        files['Contents/header.xml'] = header_xml.encode('utf-8')
+
     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+        if 'mimetype' in files:
+            zout.writestr('mimetype', files['mimetype'], compress_type=zipfile.ZIP_STORED)
         for name, data in files.items():
+            if name == 'mimetype':
+                continue
             zout.writestr(name, data)
 
 
@@ -240,6 +312,11 @@ def main():
     parser.add_argument('--output', help='출력 HWPX 파일 경로 (기본: 원본명_수정.hwpx)')
     parser.add_argument('--find', help='찾을 텍스트')
     parser.add_argument('--replace', help='바꿀 텍스트')
+    parser.add_argument(
+        '--operation',
+        choices=sorted(ALLOWED_OPERATIONS),
+        help='단일 변경 operation: replace/delete/insert_before/insert_after',
+    )
     parser.add_argument('--changes', help='여러 변경사항 JSON 파일 경로')
     parser.add_argument('--read-only', action='store_true', help='텍스트만 출력하고 종료')
     parser.add_argument('--finalize', action='store_true', help='마커 정리 모드: ⓐ는 strip, ⓐⓐ는 --accept-aa/--reject-aa로 처리')
@@ -273,14 +350,24 @@ def main():
         print(f"ⓐⓐ 처리: {'accept (strip, 교정문 유지)' if accept_aa else 'reject (원문 복원)'}")
 
         files = read_all_files(args.input)
-        section = files['Contents/section0.xml'].decode('utf-8')
-        section, stats = finalize_markers(section, accept_aa=accept_aa)
+        section_names = get_section_names(files)
+        if not section_names:
+            print("오류: Contents/section*.xml 본문 파일을 찾을 수 없습니다.")
+            sys.exit(1)
 
-        print(f"ⓐ strip: {stats['alpha_stripped']}개")
-        print(f"ⓐⓐ accept: {stats['alphaalpha_accepted']}개")
-        print(f"ⓐⓐ reject: {stats['alphaalpha_rejected']}개")
+        total_stats = {'alpha_stripped': 0, 'alphaalpha_accepted': 0, 'alphaalpha_rejected': 0}
+        for section_name in section_names:
+            section = files[section_name].decode('utf-8')
+            section, stats = finalize_markers(section, accept_aa=accept_aa)
+            files[section_name] = section.encode('utf-8')
+            for key, value in stats.items():
+                total_stats[key] += value
 
-        files['Contents/section0.xml'] = section.encode('utf-8')
+        print(f"section 처리: {len(section_names)}개")
+        print(f"ⓐ strip: {total_stats['alpha_stripped']}개")
+        print(f"ⓐⓐ accept: {total_stats['alphaalpha_accepted']}개")
+        print(f"ⓐⓐ reject: {total_stats['alphaalpha_rejected']}개")
+
         save_hwpx(files, args.output)
         print(f"저장 위치: {args.output}")
         return
@@ -290,8 +377,11 @@ def main():
     if args.changes:
         with open(args.changes, 'r', encoding='utf-8') as f:
             changes = json.load(f)
-    elif args.find and args.replace:
-        changes = [{"find": args.find, "replace": args.replace}]
+    elif args.find is not None and args.replace is not None:
+        change = {"find": args.find, "replace": args.replace}
+        if args.operation:
+            change["operation"] = args.operation
+        changes = [change]
     else:
         print("오류: --find/--replace 또는 --changes 중 하나를 지정하세요.")
         sys.exit(1)
@@ -308,7 +398,11 @@ def main():
     # 파일 읽기
     files = read_all_files(args.input)
     header = files['Contents/header.xml'].decode('utf-8')
-    section = files['Contents/section0.xml'].decode('utf-8')
+    section_names = get_section_names(files)
+    if not section_names:
+        print("오류: Contents/section*.xml 본문 파일을 찾을 수 없습니다.")
+        sys.exit(1)
+    sections = {name: files[name].decode('utf-8') for name in section_names}
 
     # 파란색 charPr 추가
     max_id = get_max_charpr_id(header)
@@ -316,10 +410,13 @@ def main():
 
     # 본문용 charPr를 기반으로 (보통 id=6 또는 7이 본문용)
     # 본문에서 실제로 가장 많이 쓰이는 id 찾기
-    used_ids = re.findall(r'charPrIDRef="(\d+)"', section)
+    used_ids = []
+    for section in sections.values():
+        used_ids.extend(re.findall(r'charPrIDRef="(\d+)"', section))
     base_id = max(set(used_ids), key=used_ids.count) if used_ids else str(max_id)
     base_id = int(base_id)
 
+    print(f"section 대상: {len(section_names)}개")
     print(f"기반 charPr id: {base_id}, 파란색 id: {blue_id}")
 
     try:
@@ -334,17 +431,26 @@ def main():
     for i, change in enumerate(changes):
         find_text = change['find']
         marker = change.get('marker', '')
-        section, ok = apply_change(section, change, blue_id)
-        tag = f"[{marker}] " if marker else ""
+        operation = change.get('operation') or ('delete' if change.get('replace') == '' else 'replace')
+        ok = False
+        matched_section = ''
+        for section_name in section_names:
+            updated, ok = apply_change(sections[section_name], change, blue_id)
+            if ok:
+                sections[section_name] = updated
+                matched_section = section_name
+                break
+        tag = f"[{operation}/{marker}] " if marker else f"[{operation}] "
         if ok:
-            print(f"[{i+1}] [OK] {tag}'{find_text[:30]}...' -> 파란색 적용")
+            print(f"[{i+1}] [OK] {tag}'{find_text[:30]}...' -> {matched_section} 파란색 적용")
             success_count += 1
         else:
             print(f"[{i+1}] [FAIL] {tag}'{find_text[:30]}...' -> 텍스트를 찾지 못함 (정확히 일치해야 함)")
 
     # 저장
     files['Contents/header.xml'] = header.encode('utf-8')
-    files['Contents/section0.xml'] = section.encode('utf-8')
+    for section_name, section in sections.items():
+        files[section_name] = section.encode('utf-8')
     save_hwpx(files, args.output)
 
     print(f"\n완료: {success_count}/{len(changes)}개 적용됨")

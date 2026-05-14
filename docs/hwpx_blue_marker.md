@@ -6,10 +6,20 @@
 
 ```json
 [
-  {"find": "반증", "replace": "방증", "marker": "ⓐ"},
-  {"find": "오랜만", "replace": "오래간만", "marker": "ⓐⓐ"}
+  {"operation": "replace", "find": "반증", "replace": "방증", "marker": "ⓐ"},
+  {"operation": "delete", "find": "반복 문장", "replace": "", "marker": "ⓐⓐ"},
+  {"operation": "insert_after", "find": "앵커 문장.", "replace": " 추가 문장.", "marker": "ⓐⓐ"}
 ]
 ```
+
+허용 operation:
+
+- `replace`: `find`를 `replace`로 치환
+- `delete`: `find` 삭제, `replace`는 빈 문자열
+- `insert_before`: `find` 앵커 앞에 `replace` 추가
+- `insert_after`: `find` 앵커 뒤에 `replace` 추가
+
+추가 작업에서도 `find`는 실제 원문에서 찾을 수 있는 앵커여야 합니다.
 
 ## 적용
 
@@ -33,4 +43,3 @@ python scripts/apply_blue.py --input 수정본.hwpx --output 최종본.hwpx --fi
 ```powershell
 python scripts/apply_blue.py --input 수정본.hwpx --output 최종본.hwpx --finalize --accept-aa
 ```
-

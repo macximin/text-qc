@@ -13,6 +13,8 @@ Run: `{{run_id}}`
 ```text
 ⓐ{원문|교정문}
 ⓐⓐ{원문|대안}
+ⓐ{삭제할 말|}
+ⓐ{|추가할 말}
 ```
 
 삭제는 교정문을 비운다.
@@ -23,10 +25,13 @@ Run: `{{run_id}}`
 
 ## changes.json 형식
 
+`operation`을 생략하면 기본값은 `replace`다. `replace`가 빈 문자열이면 `delete`로 해석한다. 추가는 `find`를 위치 앵커로 쓰고, `replace`에 추가할 문장을 넣는다.
+
 ```json
 [
   {
     "id": "chg-0001",
+    "operation": "replace",
     "severity": "P2",
     "status": "proposed",
     "marker": "ⓐ",
@@ -34,9 +39,38 @@ Run: `{{run_id}}`
     "replace": "교정문",
     "reason": "명백한 오탈자",
     "location": "ep_0001"
+  },
+  {
+    "id": "edit-0002",
+    "operation": "delete",
+    "severity": "P2",
+    "status": "proposed",
+    "marker": "ⓐⓐ",
+    "find": "삭제할 반복 문장",
+    "replace": "",
+    "reason": "직전 문단과 동일한 정보 반복",
+    "location": "ep_0001"
+  },
+  {
+    "id": "edit-0003",
+    "operation": "insert_after",
+    "severity": "P1",
+    "status": "needs-author",
+    "marker": "ⓐⓐ",
+    "find": "앵커 문장.",
+    "replace": " 빠진 인과를 잇는 추가 문장.",
+    "reason": "장면 전환의 인과 브리지 보강",
+    "location": "ep_0001"
   }
 ]
 ```
+
+허용 operation:
+
+- `replace`: 원문을 교정문/편집문으로 치환.
+- `delete`: 원문 삭제. `replace`는 빈 문자열.
+- `insert_before`: `find` 앵커 앞에 `replace` 텍스트 추가.
+- `insert_after`: `find` 앵커 뒤에 `replace` 텍스트 추가.
 
 ## 검증
 
@@ -45,6 +79,15 @@ Run: `{{run_id}}`
 ```
 
 ## HWPX 파란색 적용
+
+편집자 모드에서는 아래 HWPX 흐름을 기본으로 쓰지 않는다. 적극 편집안은 먼저 plain text에 적용한다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "{{run_root}}"
+.\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "{{run_root}}" --accept-aa
+```
+
+HWPX 파란색 표시는 별도 납품 요구가 있을 때만 사용한다.
 
 ```powershell
 python scripts/apply_blue.py --input 원본.hwpx --output 수정본.hwpx --changes changes.json
@@ -64,3 +107,4 @@ python scripts/apply_blue.py --input 수정본.hwpx --output 최종본.hwpx --fi
 - 원본 파일을 덮어쓰지 않는다.
 - 대화문 말투를 오탈자처럼 확정 교정하지 않는다.
 - 고유명사는 첫 등장 기준과 불일치할 때만 판단 요청으로 올린다.
+- 적극 편집은 기본적으로 `ⓐⓐ`로 올리고 승인 전 최종 반영하지 않는다.

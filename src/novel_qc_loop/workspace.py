@@ -29,6 +29,9 @@ TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le"
 CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(\d{1,4})\s*$")
 HASH_NUMBER_CHAPTER_RE = re.compile(r"(?m)^#(?P<num>\d{1,4})(?:\s+(?P<title>[^\n]+))?\s*$")
 MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
+EPISODE_PREFIX_CHAPTER_RE = re.compile(
+    r"(?im)^\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})[\s.:：_\-]*(?P<title>[^\n]*)$"
+)
 NUMBERED_CHAPTER_RE = re.compile(
     r"(?im)^\s*(?:제\s*)?(?P<num>\d{1,4})\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
     r"[\s.:：_\-]*(?P<title>[^\n]*)$"
@@ -223,10 +226,11 @@ def create_run(
             "01_intake": "pending",
             "02_global_audit": "pending",
             "03_adversarial_audit": "pending",
-            "04_correction_plan": "pending",
-            "05_human_facing_report": "pending",
-            "06_final_manuscript": "pending",
-            "07_export": "pending",
+            "04_editorial_pass": "pending",
+            "05_correction_plan": "pending",
+            "06_human_facing_report": "pending",
+            "07_final_manuscript": "pending",
+            "08_export": "pending",
         },
     )
     write_json(run_root / "run_manifest.json", run_manifest.to_dict())
@@ -256,6 +260,18 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
                 "end": match.end(),
             }
             for match in hash_number_matches
+        ]
+
+    episode_prefix_matches = list(EPISODE_PREFIX_CHAPTER_RE.finditer(text))
+    if episode_prefix_matches:
+        return [
+            {
+                "episode": match.group("num").zfill(3),
+                "title": (match.group("title") or "").strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in episode_prefix_matches
         ]
 
     markdown_matches = list(MARKDOWN_HEADER_RE.finditer(text))

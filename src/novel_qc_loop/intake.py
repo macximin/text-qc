@@ -79,6 +79,7 @@ class IntakeResult:
     extracted_text_path: str
     one_page_report_path: str
     llm_task_brief_path: str
+    editorial_brief_path: str
     final_manuscript_path: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -119,17 +120,34 @@ def begins_with_chapter_marker(text: str) -> bool:
     head = "\n".join(text.splitlines()[:5])
     return bool(
         re.search(
-            r"(?m)^\s*(?:ⓚ\d{1,4}|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?))",
+            r"(?im)^\s*(?:ⓚ\d{1,4}|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)|(?:chapter|ep(?:isode)?)\s*\d{1,4})",
             head,
-            flags=re.IGNORECASE,
         )
     )
 
 
 def read_hwpx_text(path: Path) -> str:
     with zipfile.ZipFile(path, "r") as archive:
+        section_names = sorted(
+            [name for name in archive.namelist() if re.match(r"^Contents/section\d+\.xml$", name)],
+            key=lambda name: int(re.search(r"section(\d+)\.xml$", name).group(1)),
+        )
+        paragraphs: list[str] = []
+        for name in section_names:
+            root = ET.fromstring(archive.read(name))
+            for elem in root.iter():
+                if local_name(elem.tag) == "p":
+                    text = "".join(elem.itertext()).strip()
+                    if text:
+                        paragraphs.append(text)
+        if paragraphs:
+            return "\n".join(paragraphs)
+
         if "Preview/PrvText.txt" in archive.namelist():
-            return decode_text_bytes(archive.read("Preview/PrvText.txt"))
+            preview = decode_text_bytes(archive.read("Preview/PrvText.txt")).strip()
+            if preview:
+                return preview
+
         text_parts: list[str] = []
         for name in sorted(archive.namelist()):
             if not name.lower().endswith(".xml"):
@@ -361,6 +379,10 @@ def mode_to_run_kind(mode: str) -> str:
         "검수": "global-audit",
         "correction": "correction-pass",
         "교정": "correction-pass",
+        "editor": "editorial-pass",
+        "editorial": "editorial-pass",
+        "편집": "editorial-pass",
+        "편집자": "editorial-pass",
         "full": "full-qc-correction",
         "전체": "full-qc-correction",
     }
@@ -491,6 +513,7 @@ def intake_manuscript(
     one_page_report_path = run_root / "human-facing" / "one_page_report.md"
     checklist_path = run_root / "llm-facing" / "handoff_checklist.md"
     adversarial_brief_path = run_root / "llm-facing" / "adversarial_3pass_brief.md"
+    editorial_brief_path = run_root / "llm-facing" / "editorial_pass_brief.md"
     correction_protocol_path = run_root / "corrections" / "marker_protocol.md"
     changes_path = run_root / "corrections" / "changes.json"
     final_readme_path = run_root / "final_manuscript" / "README.md"
@@ -500,6 +523,7 @@ def intake_manuscript(
     _render_file(templates_root / "human_facing_one_page.md", one_page_report_path, values)
     _render_file(templates_root / "llm_handoff_checklist.md", checklist_path, values)
     _render_file(templates_root / "adversarial_3pass_brief.md", adversarial_brief_path, values)
+    _render_file(templates_root / "editorial_pass_brief.md", editorial_brief_path, values)
     _render_file(templates_root / "correction_marker_protocol.md", correction_protocol_path, values)
     _render_file(templates_root / "correction_changes.empty.json", changes_path, values)
     _render_file(templates_root / "final_manuscript_readme.md", final_readme_path, values)
@@ -515,6 +539,7 @@ def intake_manuscript(
         "one_page_report_path": str(one_page_report_path),
         "llm_task_brief_path": str(llm_task_brief_path),
         "adversarial_brief_path": str(adversarial_brief_path),
+        "editorial_brief_path": str(editorial_brief_path),
         "correction_protocol_path": str(correction_protocol_path),
         "changes_path": str(changes_path),
         "manual_review_queue_path": str(manual_paths["queue_path"]),
@@ -536,6 +561,7 @@ def intake_manuscript(
         extracted_text_path=str(extracted_text_path),
         one_page_report_path=str(one_page_report_path),
         llm_task_brief_path=str(llm_task_brief_path),
+        editorial_brief_path=str(editorial_brief_path),
         final_manuscript_path=str(final_manuscript_path),
     )
 

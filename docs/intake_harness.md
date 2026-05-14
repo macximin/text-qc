@@ -94,7 +94,10 @@ workspace/{work_slug}/
 
 - `audit` / `검수`: 검수 중심
 - `correction` / `교정`: 교정 중심
+- `editor` / `편집`: 적극 편집자 모드. 중복 삭제, 문장 윤문, 빠진 브리지 추가, AI 티 완화까지 포함
 - `full` / `전체`: 검수, 적대적 감리, 교정안, human-facing 보고서, 최종 원고 후보까지
+
+편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다.
 
 ## Human-facing 보고서
 
