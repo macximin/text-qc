@@ -12,6 +12,13 @@ from .workspace import write_json
 
 ALLOWED_MARKERS = {"ⓐ", "ⓐⓐ", ""}
 ALLOWED_OPERATIONS = {"replace", "delete", "insert_before", "insert_after"}
+CONTEXTUAL_EDIT_CLASSES = {
+    "contextual_typo",
+    "contextual_typo_fix",
+    "contextual_word_error",
+    "contextual_grammar",
+}
+CONTEXT_FIELDS = ("context_before", "context_after", "context_window", "evidence_snippet")
 
 
 @dataclass(slots=True)
@@ -37,6 +44,19 @@ class ChangeApplicationResult:
     total: int
     applied: int
     skipped: int
+    issues: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ChangeContextResult:
+    source_path: str
+    changes_path: str
+    output_path: str
+    total: int
+    rendered: int
     issues: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
@@ -126,7 +146,56 @@ def validate_change_item(index: int, item: dict[str, Any]) -> list[dict[str, Any
         else:
             if occurrence_value < 1:
                 issues.append({"index": index, "field": "occurrence", "message": "required positive integer if provided"})
+    confidence = item.get("confidence_percent")
+    if confidence is not None:
+        try:
+            confidence_value = int(confidence)
+        except (TypeError, ValueError):
+            issues.append({"index": index, "field": "confidence_percent", "message": "required integer 0-100 if provided"})
+        else:
+            if not 0 <= confidence_value <= 100:
+                issues.append({"index": index, "field": "confidence_percent", "message": "required integer 0-100 if provided"})
+            if is_contextual_change(item) and marker == "ⓐ" and confidence_value < 95:
+                issues.append(
+                    {
+                        "index": index,
+                        "field": "confidence_percent",
+                        "message": "contextual typo may be ⓐ only at 95+ confidence; otherwise use ⓐⓐ",
+                    }
+                )
+    if is_contextual_change(item):
+        if not str(item.get("reason", "")).strip():
+            issues.append({"index": index, "field": "reason", "message": "contextual typo requires reason"})
+        if not str(item.get("reading_basis", "")).strip():
+            issues.append(
+                {
+                    "index": index,
+                    "field": "reading_basis",
+                    "message": "contextual typo requires a reading basis from surrounding context",
+                }
+            )
+        if not any(str(item.get(field, "")).strip() for field in CONTEXT_FIELDS):
+            issues.append(
+                {
+                    "index": index,
+                    "field": "context",
+                    "message": "contextual typo requires context_before/context_after/context_window/evidence_snippet",
+                }
+            )
+        if marker == "ⓐ" and confidence is None:
+            issues.append(
+                {
+                    "index": index,
+                    "field": "confidence_percent",
+                    "message": "contextual typo marked ⓐ requires confidence_percent >= 95",
+                }
+            )
     return issues
+
+
+def is_contextual_change(item: dict[str, Any]) -> bool:
+    edit_class = str(item.get("edit_class", "")).strip().lower()
+    return bool(item.get("requires_context")) or edit_class in CONTEXTUAL_EDIT_CLASSES
 
 
 def write_validation_result(result: CorrectionValidationResult, output_path: Path) -> None:
@@ -314,3 +383,114 @@ def write_editorial_diff(
     lines.append("```")
     diff_path.parent.mkdir(parents=True, exist_ok=True)
     diff_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def render_change_contexts(
+    *,
+    source_path: Path,
+    changes_path: Path,
+    output_path: Path,
+    window_chars: int = 360,
+    contextual_only: bool = False,
+) -> ChangeContextResult:
+    changes = json.loads(changes_path.read_text(encoding="utf-8"))
+    if not isinstance(changes, list):
+        raise ValueError("changes file must be a JSON array")
+
+    source_text = source_path.read_text(encoding="utf-8")
+    issues: list[dict[str, Any]] = []
+    rendered = 0
+    lines = [
+        "# Change Contexts",
+        "",
+        f"- Source: `{source_path}`",
+        f"- Changes: `{changes_path}`",
+        f"- Window chars: {window_chars}",
+        "",
+    ]
+
+    for index, change in enumerate(changes, start=1):
+        if not isinstance(change, dict):
+            issues.append({"index": index, "field": "$", "message": "item must be object"})
+            continue
+        if contextual_only and not is_contextual_change(change):
+            continue
+        find = str(change.get("find", ""))
+        if not find:
+            issues.append({"index": index, "id": change.get("id", ""), "field": "find", "message": "missing anchor"})
+            continue
+        positions = find_occurrences(source_text, find)
+        if not positions:
+            issues.append({"index": index, "id": change.get("id", ""), "field": "find", "message": "anchor not found"})
+            continue
+
+        requested_occurrence = change.get("occurrence")
+        if requested_occurrence is not None:
+            try:
+                occurrence = int(requested_occurrence)
+                if occurrence < 1:
+                    raise IndexError
+                selected_positions = [positions[occurrence - 1]]
+            except (ValueError, IndexError):
+                issues.append(
+                    {
+                        "index": index,
+                        "id": change.get("id", ""),
+                        "field": "occurrence",
+                        "message": "occurrence is outside anchor match count",
+                        "matches": len(positions),
+                    }
+                )
+                continue
+        else:
+            selected_positions = positions[:3]
+
+        lines.extend(
+            [
+                f"## {change.get('id') or f'change-{index:04d}'}",
+                "",
+                f"- operation: `{infer_operation(change)}`",
+                f"- marker: `{change.get('marker', '') or '(none)'}`",
+                f"- edit_class: `{change.get('edit_class', '') or '(none)'}`",
+                f"- matches: {len(positions)}",
+                f"- reason: {change.get('reason', '')}",
+                f"- reading_basis: {change.get('reading_basis', '')}",
+                "",
+            ]
+        )
+        for match_index, position in enumerate(selected_positions, start=1):
+            start = max(0, position - window_chars)
+            end = min(len(source_text), position + len(find) + window_chars)
+            before = source_text[start:position]
+            target = source_text[position : position + len(find)]
+            after = source_text[position + len(find) : end]
+            lines.extend(
+                [
+                    f"### Match {match_index}",
+                    "",
+                    "```text",
+                    before + "[[" + target + "]]" + after,
+                    "```",
+                    "",
+                ]
+            )
+        rendered += 1
+
+    lines.extend(["## Issues", ""])
+    if issues:
+        for issue in issues:
+            label = issue.get("id") or f"index {issue.get('index', '?')}"
+            lines.append(f"- `{label}` {issue.get('message', '')}")
+    else:
+        lines.append("- None")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return ChangeContextResult(
+        source_path=str(source_path),
+        changes_path=str(changes_path),
+        output_path=str(output_path),
+        total=len(changes),
+        rendered=rendered,
+        issues=issues,
+    )

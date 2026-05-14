@@ -44,5 +44,21 @@
     "reason": "장면 전환의 인과 브리지 보강",
     "location": "ep_0001",
     "edit_class": "continuity_bridge"
+  },
+  {
+    "id": "ctx-typo-0005",
+    "operation": "replace",
+    "severity": "P2",
+    "status": "needs-author",
+    "marker": "ⓐⓐ",
+    "find": "문맥상 어긋난 원문",
+    "replace": "문맥상 맞는 후보",
+    "reason": "앞뒤 행동 연쇄상 단어가 어긋남",
+    "location": "ep_0001",
+    "edit_class": "contextual_typo",
+    "context_before": "직전 문맥 요약 또는 원문 일부",
+    "context_after": "직후 문맥 요약 또는 원문 일부",
+    "reading_basis": "왜 이 단어가 문맥상 오기인지",
+    "confidence_percent": 90
   }
 ]

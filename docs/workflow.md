@@ -85,8 +85,10 @@ Pass 3: AI 티/문체
 - 적극 편집자 모드에서는 `replace`, `delete`, `insert_before`, `insert_after`로 문장 단위 윤문과 브리지 추가까지 구조화합니다.
 - 추가 작업의 `find`는 빈 값이 아니라 실제 원문 위치를 잡는 앵커입니다.
 - 편집자 모드 적용본은 HWP/HWPX가 아니라 `apply-changes-text`로 plain text 후보본과 Markdown diff를 만듭니다.
+- 문맥형 오타는 `edit_class=contextual_typo`로 올리고, `reading_basis`와 앞뒤 문맥 근거를 남깁니다.
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "workspace\{work}\runs\{run_id}" --contextual-only
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}"
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}" --accept-aa
 ```

@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from .analyze import analyze_run
-from .corrections import apply_changes_to_text_file, validate_changes_file, write_validation_result
+from .corrections import (
+    apply_changes_to_text_file,
+    render_change_contexts,
+    validate_changes_file,
+    write_validation_result,
+)
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
 from .reports import (
@@ -130,6 +135,41 @@ def cmd_apply_changes_text(args: argparse.Namespace) -> int:
         output_path=output_path,
         diff_path=diff_path,
         accept_aa=args.accept_aa,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_render_change_contexts(args: argparse.Namespace) -> int:
+    if not args.run_root and not (args.source and args.changes):
+        raise SystemExit("use --run-root or provide both --source and --changes")
+
+    run_root = Path(args.run_root).resolve() if args.run_root else None
+    source_path = (
+        Path(args.source).resolve()
+        if args.source
+        else run_root / "final_manuscript" / "final_manuscript.txt"
+    )
+    changes_path = (
+        Path(args.changes).resolve()
+        if args.changes
+        else run_root / "corrections" / "changes.json"
+    )
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else (
+            run_root / "corrections" / "change_contexts.md"
+            if run_root
+            else changes_path.with_name("change_contexts.md")
+        )
+    )
+    result = render_change_contexts(
+        source_path=source_path,
+        changes_path=changes_path,
+        output_path=output_path,
+        window_chars=args.window_chars,
+        contextual_only=args.contextual_only,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
@@ -664,6 +704,18 @@ def build_parser() -> argparse.ArgumentParser:
     apply_text.add_argument("--diff-output", help="Markdown diff path; default: RUN/corrections/editorial_diff.md")
     apply_text.add_argument("--accept-aa", action="store_true", help="apply ⓐⓐ changes too")
     apply_text.set_defaults(func=cmd_apply_changes_text)
+
+    change_contexts = subparsers.add_parser(
+        "render-change-contexts",
+        help="render surrounding source context for changes JSON anchors",
+    )
+    change_contexts.add_argument("--run-root", help="run folder; defaults paths under final_manuscript/ and corrections/")
+    change_contexts.add_argument("--source", help="source text path; default: RUN/final_manuscript/final_manuscript.txt")
+    change_contexts.add_argument("--changes", help="changes JSON path; default: RUN/corrections/changes.json")
+    change_contexts.add_argument("--output", help="Markdown output path; default: RUN/corrections/change_contexts.md")
+    change_contexts.add_argument("--window-chars", type=int, default=360)
+    change_contexts.add_argument("--contextual-only", action="store_true", help="render only contextual edit classes")
+    change_contexts.set_defaults(func=cmd_render_change_contexts)
 
     validate_submission = subparsers.add_parser("validate-submission", help="validate manual review submission JSON")
     validate_submission.add_argument("--submission")

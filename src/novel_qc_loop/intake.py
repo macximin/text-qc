@@ -514,6 +514,7 @@ def intake_manuscript(
     checklist_path = run_root / "llm-facing" / "handoff_checklist.md"
     adversarial_brief_path = run_root / "llm-facing" / "adversarial_3pass_brief.md"
     editorial_brief_path = run_root / "llm-facing" / "editorial_pass_brief.md"
+    contextual_typo_brief_path = run_root / "llm-facing" / "contextual_typo_brief.md"
     correction_protocol_path = run_root / "corrections" / "marker_protocol.md"
     changes_path = run_root / "corrections" / "changes.json"
     final_readme_path = run_root / "final_manuscript" / "README.md"
@@ -524,6 +525,7 @@ def intake_manuscript(
     _render_file(templates_root / "llm_handoff_checklist.md", checklist_path, values)
     _render_file(templates_root / "adversarial_3pass_brief.md", adversarial_brief_path, values)
     _render_file(templates_root / "editorial_pass_brief.md", editorial_brief_path, values)
+    _render_file(templates_root / "contextual_typo_brief.md", contextual_typo_brief_path, values)
     _render_file(templates_root / "correction_marker_protocol.md", correction_protocol_path, values)
     _render_file(templates_root / "correction_changes.empty.json", changes_path, values)
     _render_file(templates_root / "final_manuscript_readme.md", final_readme_path, values)
@@ -540,6 +542,7 @@ def intake_manuscript(
         "llm_task_brief_path": str(llm_task_brief_path),
         "adversarial_brief_path": str(adversarial_brief_path),
         "editorial_brief_path": str(editorial_brief_path),
+        "contextual_typo_brief_path": str(contextual_typo_brief_path),
         "correction_protocol_path": str(correction_protocol_path),
         "changes_path": str(changes_path),
         "manual_review_queue_path": str(manual_paths["queue_path"]),

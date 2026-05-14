@@ -72,6 +72,25 @@ Run: `{{run_id}}`
 - `insert_before`: `find` 앵커 앞에 `replace` 텍스트 추가.
 - `insert_after`: `find` 앵커 뒤에 `replace` 텍스트 추가.
 
+## 문맥형 오타
+
+패턴형 오탈자가 아니라 앞뒤 문맥을 읽어야 보이는 오기는 `edit_class=contextual_typo`로 올린다.
+
+필수 필드:
+
+- `reading_basis`: 앞뒤 문맥상 왜 오기인지.
+- `context_before` / `context_after` / `context_window` / `evidence_snippet` 중 하나 이상.
+- `reason`: 변경 이유.
+
+`ⓐ`로 확정하려면 `confidence_percent`가 95 이상이어야 한다. 작가 의도 가능성이 남으면 `ⓐⓐ`로 둔다.
+
+문맥 확인용 파일 생성:
+
+```powershell
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "{{run_root}}"
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "{{run_root}}" --contextual-only
+```
+
 ## 검증
 
 ```powershell

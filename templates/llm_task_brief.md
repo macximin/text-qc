@@ -33,6 +33,7 @@ Run: `{{run_id}}`
 - 검수와 교정을 분리한다.
 - 내부 분석은 `llm-facing/`에 둔다.
 - 작가/편집자에게 보여줄 보고서는 `human-facing/one_page_report.md`를 기본 1장으로 유지한다.
+- 문맥형 오타는 패턴 치환이 아니라 앞뒤 문맥을 읽고 판단한다.
 - human-facing 보고서는 한국어로 쓰고, 모든 핵심 판단에 `주장`과 `근거`를 함께 둔다.
 - 근거 없는 주장은 최종 보고서에 올리지 않는다.
 - 최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`까지 통과해야 제출 가능하다.
@@ -57,6 +58,8 @@ Run: `{{run_id}}`
 - 변경 근거를 남긴다.
 - 삭제는 `operation=delete`, 추가는 `operation=insert_before` 또는 `operation=insert_after`로 남긴다.
 - 추가 작업에서도 `find`는 빈 문자열이 아니라 삽입 위치를 잡는 앵커 문장이어야 한다.
+- 문맥형 오타는 `edit_class=contextual_typo`로 두고 `reading_basis`와 앞뒤 문맥 근거를 남긴다.
+- 문맥형 오타를 `ⓐ`로 확정하려면 `confidence_percent`가 95 이상이어야 한다.
 
 ### editor / 편집
 
@@ -65,6 +68,7 @@ Run: `{{run_id}}`
 - 필요하면 문장 단위 치환, 삭제, 추가를 모두 제안한다.
 - 적극 편집은 기본적으로 `ⓐⓐ`로 올리고, 작가 승인 전 최종 원고에 확정 반영하지 않는다.
 - 편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않고, `apply-changes-text`로 텍스트 후보본과 Markdown diff를 만든다.
+- 문맥형 오타 후보는 `render-change-contexts`로 주변 문맥을 뽑은 뒤 판단한다.
 - 세부 기준은 `llm-facing/editorial_pass_brief.md`를 따른다.
 
 ### full / 전체

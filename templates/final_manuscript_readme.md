@@ -18,4 +18,10 @@ intake 직후에는 추출 원고가 그대로 복사되어 있습니다. 검수
 
 검토용 diff는 `corrections/editorial_diff.md`에 생성됩니다.
 
+문맥형 오타 후보의 주변 원문은 `corrections/change_contexts.md`에 생성합니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "{{run_root}}" --contextual-only
+```
+
 원본은 `inputs/original/`에 보존되어야 하며, 이 폴더의 파일만 수정 대상으로 삼습니다.

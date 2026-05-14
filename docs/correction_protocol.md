@@ -46,6 +46,25 @@
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}" --accept-aa
 ```
 
+## 문맥형 오타
+
+문맥형 오타는 정규식이나 단어 목록만으로 잡지 않습니다. 해당 문장 앞뒤를 읽고, 장면의 물건, 행동 연쇄, 호칭, 지시 대상, 직전 상태와 맞지 않는 단어를 후보로 올립니다.
+
+`changes.json`에서는 `edit_class=contextual_typo`를 사용합니다.
+
+필수:
+
+- `reading_basis`: 앞뒤 문맥상 왜 오기인지.
+- `context_before` / `context_after` / `context_window` / `evidence_snippet` 중 하나 이상.
+- `reason`: 변경 이유.
+
+문맥형 오타를 `ⓐ`로 확정하려면 `confidence_percent`가 95 이상이어야 합니다. 확신이 부족하거나 작가 의도 가능성이 있으면 `ⓐⓐ`로 둡니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "workspace\{work}\runs\{run_id}"
+.\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "workspace\{work}\runs\{run_id}" --contextual-only
+```
+
 ## 원칙
 
 - 원본은 덮어쓰지 않는다.

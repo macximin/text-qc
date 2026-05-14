@@ -99,6 +99,8 @@ workspace/{work_slug}/
 
 편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다.
 
+문맥형 오타 확인은 `render-change-contexts`로 `corrections/change_contexts.md`를 만든 뒤 진행합니다. `edit_class=contextual_typo` 변경안은 앞뒤 문맥 근거와 `reading_basis`를 가져야 합니다.
+
 ## Human-facing 보고서
 
 기본 보고서는 `human-facing/one_page_report.md` 하나입니다.
