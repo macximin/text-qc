@@ -3,6 +3,7 @@ from __future__ import annotations
 import posixpath
 import re
 import shutil
+import subprocess
 import zipfile
 from html import unescape
 from urllib.parse import unquote
@@ -11,12 +12,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .internal_paths import PANMU_TEAM_SSOT_NAS_ROOT
 from .package_qc import collect_epub_paths, inspect_epub_packages, natural_path_sort_key, write_epub_package_qc
 from .submission import write_manual_review_scaffold
 from .workspace import create_run, create_work, decode_text_bytes, inspect_text, read_json, read_text_auto, safe_slug, write_json
 
 
-SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwpx", ".epub"}
+SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwp", ".hwpx", ".epub"}
 EPUB_BODY_MEDIA_TYPES = {"application/xhtml+xml", "text/html", "application/xml", "text/xml"}
 EPUB_NON_BODY_HINTS = {
     "cover",
@@ -88,15 +90,34 @@ class IntakeResult:
 
 def read_source_text(path: Path) -> str:
     if path.is_dir():
-        return read_epub_collection_text(path)
+        return read_document_collection_text(path)
     suffix = path.suffix.lower()
     if suffix in {".txt", ".text", ".md", ".markdown"}:
         return read_text_auto(path)
+    if suffix == ".hwp":
+        return read_hwp_text(path)
     if suffix == ".hwpx":
         return read_hwpx_text(path)
     if suffix == ".epub":
         return read_epub_text(path)
     raise ValueError(f"unsupported input type: {path.suffix}")
+
+
+def read_document_collection_text(path: Path) -> str:
+    document_paths = collect_input_document_paths(path)
+    if not document_paths:
+        raise ValueError(f"supported manuscript files not found in folder: {path}")
+    parts = []
+    for index, document_path in enumerate(document_paths, start=1):
+        body = read_source_text(document_path).strip()
+        if not body:
+            continue
+        if not begins_with_chapter_marker(body):
+            body = f"{index}화\n{body}"
+        parts.append(body)
+    if not parts:
+        raise ValueError(f"manuscript body text not found in folder: {path}")
+    return "\n\n".join(parts)
 
 
 def read_epub_collection_text(path: Path) -> str:
@@ -120,7 +141,7 @@ def begins_with_chapter_marker(text: str) -> bool:
     head = "\n".join(text.splitlines()[:5])
     return bool(
         re.search(
-            r"(?im)^\s*(?:ⓚ\d{1,4}|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)|(?:chapter|ep(?:isode)?)\s*\d{1,4})",
+            r"(?im)^\s*(?:ⓚ(?:제\s*)?\d{1,4}(?:\s*(?:화|회|장|편|챕터))?|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)|(?:chapter|ep(?:isode)?)\s*\d{1,4})",
             head,
         )
     )
@@ -157,6 +178,24 @@ def read_hwpx_text(path: Path) -> str:
         if text_parts:
             return "\n".join(part.strip() for part in text_parts if part.strip())
     raise ValueError(f"HWPX text not found: {path}")
+
+
+def read_hwp_text(path: Path) -> str:
+    hwp5txt = shutil.which("hwp5txt")
+    if not hwp5txt:
+        raise RuntimeError("hwp5txt is required to extract .hwp text but was not found on PATH")
+    result = subprocess.run(
+        [hwp5txt, str(path)],
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        stderr = decode_text_bytes(result.stderr).strip()
+        raise RuntimeError(f"hwp5txt failed for {path}: {stderr or result.returncode}")
+    text = decode_text_bytes(result.stdout).strip()
+    if not text:
+        raise ValueError(f"HWP text not found: {path}")
+    return text
 
 
 def read_epub_text(path: Path) -> str:
@@ -362,6 +401,25 @@ def is_chapter_title_candidate(value: str) -> bool:
     )
 
 
+def collect_input_document_paths(path: Path) -> list[Path]:
+    if path.is_file() and path.suffix.lower() in SUPPORTED_INPUT_SUFFIXES:
+        return [path]
+    if not path.is_dir():
+        return []
+    return sorted(
+        (item for item in path.iterdir() if item.is_file() and item.suffix.lower() in SUPPORTED_INPUT_SUFFIXES),
+        key=natural_path_sort_key,
+    )
+
+
+def contains_epub_input(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() == ".epub"
+    if path.is_dir():
+        return any(item.is_file() and item.suffix.lower() == ".epub" for item in path.iterdir())
+    return False
+
+
 def unique_slug(workspace_root: Path, preferred: str) -> str:
     base = safe_slug(preferred)
     candidate = base
@@ -413,12 +471,11 @@ def intake_manuscript(
     input_path = input_path.resolve()
     if not input_path.exists():
         raise FileNotFoundError(input_path)
-    is_epub_collection = input_path.is_dir()
-    if is_epub_collection and not any(
-        item.is_file() and item.suffix.lower() == ".epub" for item in input_path.iterdir()
-    ):
+    is_document_collection = input_path.is_dir()
+    input_document_paths = collect_input_document_paths(input_path) if is_document_collection else []
+    if is_document_collection and not input_document_paths:
         raise ValueError(f"unsupported input folder: {input_path}")
-    if not is_epub_collection and input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
+    if not is_document_collection and input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
         raise ValueError(f"unsupported input type: {input_path.suffix}")
 
     source_text = read_source_text(input_path)
@@ -442,22 +499,22 @@ def intake_manuscript(
         collection_dir = original_dir / input_path.name
         collection_dir.mkdir(parents=True, exist_ok=True)
         copied_items = []
-        for item in collect_epub_paths(input_path):
+        for item in input_document_paths:
             destination = collection_dir / item.name
             shutil.copy2(item, destination)
             copied_items.append({"name": item.name, "path": str(destination), "size": destination.stat().st_size})
-        original_path = original_dir / "epub_collection_manifest.json"
-        epub_items = [
+        original_path = original_dir / "document_collection_manifest.json"
+        source_items = [
             {"name": item.name, "path": str(item.resolve()), "size": item.stat().st_size}
-            for item in collect_epub_paths(input_path)
+            for item in input_document_paths
         ]
         write_json(
             original_path,
             {
-                "schema_version": "epub_collection_manifest.v1",
+                "schema_version": "document_collection_manifest.v1",
                 "source_folder": str(input_path),
-                "epub_count": len(epub_items),
-                "items": epub_items,
+                "item_count": len(source_items),
+                "items": source_items,
                 "copied_folder": str(collection_dir),
                 "copied_items": copied_items,
             },
@@ -484,7 +541,7 @@ def intake_manuscript(
     write_json(run_root / "evidence" / "inspection.json", inspection.to_dict())
     manual_paths = write_manual_review_scaffold(run_root / "evidence" / "submission")
     package_qc_paths: dict[str, Path] = {}
-    if input_path.is_dir() or input_path.suffix.lower() == ".epub":
+    if contains_epub_input(input_path):
         package_qc = inspect_epub_packages(input_path)
         package_qc_paths = write_epub_package_qc(package_qc, run_root / "evidence" / "package")
 
@@ -499,6 +556,7 @@ def intake_manuscript(
         "audience": audience or "미지정",
         "platform": platform or "미지정",
         "source_path": str(input_path),
+        "internal_nas_root": PANMU_TEAM_SSOT_NAS_ROOT,
         "extracted_text_path": str(extracted_text_path),
         "char_count": inspection.char_count,
         "chars_no_space": inspection.chars_no_space,
@@ -587,7 +645,7 @@ def intake_inbox(
         if path.name.startswith("."):
             continue
         if path.is_dir():
-            if not any(item.is_file() and item.suffix.lower() == ".epub" for item in path.iterdir()):
+            if not collect_input_document_paths(path):
                 continue
         elif not path.is_file() or path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
             continue

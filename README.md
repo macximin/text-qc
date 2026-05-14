@@ -56,6 +56,8 @@ runs/                 임시 전체 실행 로그, git ignore
 
 `초기 원고(input)/`와 `최종 원고(output)/`는 사람이 파일을 넣고 꺼내기 쉬운 로컬 편의 폴더입니다. git에는 `.gitkeep`만 남기며, 그 안의 원고, 교정본, PDF, HWPX, export 산출물은 커밋하지 않습니다. 공유해야 하는 것은 원고 본문이 아니라 재현 가능한 하네스 코드, 템플릿, 스키마, 운영 문서입니다.
 
+내부 NAS 원본 root는 `\\172.16.10.120\소설사업부\판무팀_ssot`입니다. 하네스는 이 경로를 원본 참조 root로만 사용하고, 원본 파일은 직접 수정하지 않습니다. intake 이후 작업은 run 내부의 `inputs/original/`, `extracted/`, `final_manuscript/`, `corrections/` 산출물에서 진행합니다.
+
 ## 작품 단위
 
 각 작품은 `workspace/{work_slug}` 아래에 독립적으로 생성됩니다.
@@ -82,7 +84,7 @@ workspace/canaria/
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 ```
 
-지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwpx`, `.epub` 및 EPUB 파일이 들어 있는 폴더입니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. EPUB 파일 또는 폴더를 넣으면 `evidence/package/epub_package_qc.*`에 언어, UUID 중복, 파일명 규칙 같은 패키지 QC도 함께 남깁니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
+지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwp`, `.hwpx`, `.epub` 및 지원 원고 파일이 들어 있는 폴더입니다. `.hwp`는 PATH의 `hwp5txt`로 텍스트를 추출합니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. EPUB 파일 또는 폴더를 넣으면 `evidence/package/epub_package_qc.*`에 언어, UUID 중복, 파일명 규칙 같은 패키지 QC도 함께 남깁니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, `ⓚ제1화`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
 
 하네스는 제목을 유추하고, 작품 폴더와 run 폴더를 만들고, 다음 산출물을 자동 생성합니다.
 

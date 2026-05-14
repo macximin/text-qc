@@ -7,6 +7,7 @@ Run: `{{run_id}}`
 ## 입력
 
 - 원본 경로: `{{source_path}}`
+- 내부 NAS root: `{{internal_nas_root}}`
 - 추출 텍스트: `{{extracted_text_path}}`
 - 감리 큐: `{{manual_review_queue_path}}`
 - 감리 제출 파일: `{{manual_review_submission_path}}`

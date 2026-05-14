@@ -26,7 +26,7 @@ RUN_SUBDIRS = (
     "exports",
 )
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
-CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(\d{1,4})\s*$")
+CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(?:제\s*)?(\d{1,4})(?:\s*(?:화|회|장|편|챕터))?\s*$")
 HASH_NUMBER_CHAPTER_RE = re.compile(r"(?m)^#(?P<num>\d{1,4})(?:\s+(?P<title>[^\n]+))?\s*$")
 MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
 EPISODE_PREFIX_CHAPTER_RE = re.compile(
@@ -238,41 +238,53 @@ def create_run(
 
 
 def find_chapter_markers(text: str) -> list[dict[str, Any]]:
-    marker_matches = list(CHAPTER_MARKER_RE.finditer(text))
-    if marker_matches:
-        return [
+    markers: list[dict[str, Any]] = []
+    markers.extend(
+        [
             {
                 "episode": match.group(1).zfill(3),
                 "title": "",
                 "start": match.start(),
                 "end": match.end(),
             }
-            for match in marker_matches
+            for match in CHAPTER_MARKER_RE.finditer(text)
         ]
-
-    hash_number_matches = list(HASH_NUMBER_CHAPTER_RE.finditer(text))
-    if hash_number_matches:
-        return [
+    )
+    markers.extend(
+        [
             {
                 "episode": match.group("num").zfill(3),
                 "title": (match.group("title") or "").strip(),
                 "start": match.start(),
                 "end": match.end(),
             }
-            for match in hash_number_matches
+            for match in HASH_NUMBER_CHAPTER_RE.finditer(text)
         ]
-
-    episode_prefix_matches = list(EPISODE_PREFIX_CHAPTER_RE.finditer(text))
-    if episode_prefix_matches:
-        return [
+    )
+    markers.extend(
+        [
             {
                 "episode": match.group("num").zfill(3),
                 "title": (match.group("title") or "").strip(),
                 "start": match.start(),
                 "end": match.end(),
             }
-            for match in episode_prefix_matches
+            for match in EPISODE_PREFIX_CHAPTER_RE.finditer(text)
         ]
+    )
+    markers.extend(
+        [
+            {
+                "episode": match.group("num").zfill(3),
+                "title": match.group("title").strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in NUMBERED_CHAPTER_RE.finditer(text)
+        ]
+    )
+    if markers:
+        return dedupe_chapter_markers(markers)
 
     markdown_matches = list(MARKDOWN_HEADER_RE.finditer(text))
     if markdown_matches:
@@ -286,16 +298,19 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
             for idx, match in enumerate(markdown_matches)
         ]
 
-    numbered_matches = list(NUMBERED_CHAPTER_RE.finditer(text))
-    return [
-        {
-            "episode": match.group("num").zfill(3),
-            "title": match.group("title").strip(),
-            "start": match.start(),
-            "end": match.end(),
-        }
-        for match in numbered_matches
-    ]
+    return []
+
+
+def dedupe_chapter_markers(markers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen_starts: set[int] = set()
+    for marker in sorted(markers, key=lambda item: int(item["start"])):
+        start = int(marker["start"])
+        if start in seen_starts:
+            continue
+        seen_starts.add(start)
+        deduped.append(marker)
+    return deduped
 
 
 def unique_run_id(work_root: Path, kind_slug: str) -> str:
@@ -320,11 +335,15 @@ def inspect_text(path: Path) -> TextInspection:
     allowed_stage_cues = [row for row in bracketed_rows if not row.get("blocks_submission")]
     chapter_chars: dict[str, int] = {}
     if chapter_markers:
+        seen_episodes: dict[str, int] = {}
         for idx, marker in enumerate(chapter_markers):
             start = int(marker["end"])
             end = int(chapter_markers[idx + 1]["start"]) if idx + 1 < len(chapter_markers) else len(text)
             body = text[start:end]
-            chapter_chars[str(marker["episode"])] = len(re.sub(r"\s+", "", body))
+            episode = str(marker["episode"])
+            seen_episodes[episode] = seen_episodes.get(episode, 0) + 1
+            key = episode if seen_episodes[episode] == 1 else f"{episode}_{seen_episodes[episode]}"
+            chapter_chars[key] = len(re.sub(r"\s+", "", body))
 
     avg_len = round(sum(lengths) / len(lengths), 1) if lengths else 0.0
     return TextInspection(

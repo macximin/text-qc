@@ -20,14 +20,23 @@
 - `.text`
 - `.md`
 - `.markdown`
+- `.hwp` (`hwp5txt` 필요)
 - `.hwpx` (`Preview/PrvText.txt` 우선, 없으면 HWPX XML 본문 fallback)
 - `.epub` (OPF spine 기준 본문 XHTML만 추출, metadata/nav/toc/cover는 제외)
 
 텍스트 인코딩은 UTF-8/UTF-8 BOM/CP949/EUC-KR/UTF-16 계열을 자동 감지합니다.
 
+내부 NAS 원본 root:
+
+```text
+\\172.16.10.120\소설사업부\판무팀_ssot
+```
+
+이 경로는 원본 참조 root입니다. 원본은 직접 수정하지 않고, intake가 만든 run 내부 산출물을 수정 대상으로 삼습니다.
+
 감지하는 회차 표기:
 
-- `ⓚ001`
+- `ⓚ001`, `ⓚ제1화`
 - Markdown 제목: `# 1화`
 - 번호형 제목: `제1화`, `001화`, `1장`, `Episode 1`
 
@@ -45,7 +54,7 @@
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full --analyze
 ```
 
-각 파일마다 제목을 유추하고, `workspace/{work_slug}` 아래에 독립 작업 공간을 만듭니다.
+각 파일 또는 지원 원고 파일이 들어 있는 폴더마다 제목을 유추하고, `workspace/{work_slug}` 아래에 독립 작업 공간을 만듭니다.
 
 ## 자동 생성 구조
 

@@ -14,6 +14,7 @@ Run: `{{run_id}}`
 ## 필수 입력물
 
 - 추출 텍스트: `{{extracted_text_path}}`
+- 내부 NAS root: `{{internal_nas_root}}`
 - inspection: `evidence/inspection.json`
 - facts: `evidence/facts/`
 - review candidates: `evidence/review/`

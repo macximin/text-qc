@@ -367,12 +367,17 @@ def split_chapters(text: str) -> list[dict[str, Any]]:
     chapter_markers = find_chapter_markers(text)
     if chapter_markers:
         chapters = []
+        seen_episodes: dict[str, int] = {}
         for idx, marker in enumerate(chapter_markers):
             start = int(marker["end"])
             end = int(chapter_markers[idx + 1]["start"]) if idx + 1 < len(chapter_markers) else len(text)
+            episode = str(marker["episode"])
+            seen_episodes[episode] = seen_episodes.get(episode, 0) + 1
+            episode_key = episode if seen_episodes[episode] == 1 else f"{episode}_{seen_episodes[episode]}"
             chapters.append(
                 {
-                    "episode": marker["episode"],
+                    "episode": episode_key,
+                    "base_episode": episode,
                     "title": marker.get("title", ""),
                     "text": text[start:end],
                     "start_offset": start,
