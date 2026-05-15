@@ -43,6 +43,8 @@
 
 `edit_class=ai_slop_cleanup`은 사람이 바로 알 수 있게 `reason`과 HWPX 의견에 `AI-slop 신호:`를 직접 표시합니다. 반복 표현, 추상 강도어, 빈 감탄, 균질한 문장 리듬 중 무엇을 줄이는지 밝히고, 단순히 "압축", "덜어냄"으로만 쓰지 않습니다.
 
+`insert_before`/`insert_after`의 `find`는 가능하면 회차 제목이나 소제목이 아니라 실제 본문 문장을 앵커로 잡습니다. 불가피하게 회차 헤더를 앵커로 잡은 경우에도 중간 검토용 HWPX는 `ⓐⓐ` 의견을 헤더 줄에 붙이지 않고 별도 문단으로 분리합니다.
+
 ```powershell
 .\scripts\novel-qc-loop.ps1 render-marked-manuscript-hwpx --run-root "workspace\{work}\runs\{run_id}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}"

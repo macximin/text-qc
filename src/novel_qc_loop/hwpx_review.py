@@ -227,7 +227,9 @@ def build_marker_events(
         replacement = marker_replacement_text(change, operation)
 
         if marker == "ⓐⓐ":
-            note_at = start if operation == "insert_before" else end
+            note_at, note_prefix, note_suffix = aa_note_layout(
+                source_text, change, start, end, operation
+            )
             event = MarkerEvent(
                 start=note_at,
                 end=note_at,
@@ -235,9 +237,9 @@ def build_marker_events(
                 change_id=change_id,
                 marker=marker,
                 runs=[
-                    ReviewRun(" ⓐⓐ("),
+                    ReviewRun(note_prefix),
                     ReviewRun(aa_opinion_text(change, operation), BLUE_CHARPR),
-                    ReviewRun(")"),
+                    ReviewRun(note_suffix),
                 ],
             )
         if operation in {"replace", "delete"}:
@@ -294,6 +296,67 @@ def build_marker_events(
 
 def normalize_review_marker(change: dict[str, Any]) -> str:
     return str(change.get("marker") or "ⓐⓐ")
+
+
+def aa_note_layout(
+    source_text: str,
+    change: dict[str, Any],
+    start: int,
+    end: int,
+    operation: str,
+) -> tuple[int, str, str]:
+    if operation == "insert_before":
+        note_at = start
+    elif operation in {"replace", "delete"}:
+        note_at = visible_anchor_end(source_text, start, end)
+    else:
+        note_at = end
+
+    replace = str(change.get("replace", ""))
+    standalone = operation in {"insert_before", "insert_after"} and (
+        replace.startswith(("\n", "\r")) or replace.endswith(("\n", "\r"))
+    )
+    if is_chapter_heading_anchor(source_text, start, end):
+        standalone = True
+        if operation == "insert_after":
+            note_at = after_heading_block_position(source_text, start, end)
+        elif operation == "insert_before":
+            note_at = line_start_position(source_text, start)
+
+    if standalone:
+        return note_at, "ⓐⓐ(", ")\n\n"
+    return note_at, " ⓐⓐ(", ")"
+
+
+def is_chapter_heading_anchor(source_text: str, start: int, end: int) -> bool:
+    line_start = line_start_position(source_text, start)
+    line_end = source_text.find("\n", end)
+    if line_end < 0:
+        line_end = len(source_text)
+    line = source_text[line_start:line_end].strip()
+    return bool(re.match(r"^(?:[#\s]*)?ⓚ?\s*(?:제\s*)?\d+\s*(?:화|장)\b", line))
+
+
+def line_start_position(source_text: str, index: int) -> int:
+    return source_text.rfind("\n", 0, index) + 1
+
+
+def visible_anchor_end(source_text: str, start: int, end: int) -> int:
+    while end > start and source_text[end - 1] in " \t\r\n":
+        end -= 1
+    return end
+
+
+def after_heading_block_position(source_text: str, start: int, end: int) -> int:
+    line_end = source_text.find("\n", end)
+    if line_end < 0:
+        return end
+    pos = line_end + 1
+    while True:
+        match = re.match(r"[ \t]*(?:\r?\n)", source_text[pos:])
+        if not match:
+            return pos
+        pos += match.end()
 
 
 def aa_opinion_text(change: dict[str, Any], operation: str) -> str:

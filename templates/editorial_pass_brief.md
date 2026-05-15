@@ -45,6 +45,8 @@ Run: `{{run_id}}`
 
 편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. 변경안은 plain text에 적용하고, 결과는 `final_manuscript/editorial_candidate.txt`, 검토용 차이는 `corrections/editorial_diff.md`로 봅니다. 다만 중간 확인용으로는 `render-marked-manuscript-hwpx`를 사용해 원문 순서 그대로 기호가 들어간 HWPX를 생성합니다.
 
+추가 후보의 `find`는 회차 제목/소제목보다 실제 본문 문장을 우선합니다. 회차 헤더 바로 뒤에 브리지를 넣어야 하는 경우에도 다음 본문 문장을 `insert_before` 앵커로 잡아, `ⓐⓐ` 의견이 소제목 줄에 붙지 않게 합니다.
+
 정합성 평가와 교정은 반복합니다. 편집 후보를 적용한 뒤에는 같은 회차와 연결 회차를 다시 읽고, `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀 항목을 분리합니다. 이 루프가 닫히기 전에는 최종 개선 보고서에 “해결됨”이라고 쓰지 않습니다.
 
 ```json
