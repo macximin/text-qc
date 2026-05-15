@@ -26,8 +26,22 @@ RUN_SUBDIRS = (
     "exports",
 )
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
-CHAPTER_MARKER_RE = re.compile(r"(?m)^ⓚ(?:제\s*)?(\d{1,4})(?:\s*(?:화|회|장|편|챕터))?\s*$")
-HASH_NUMBER_CHAPTER_RE = re.compile(r"(?m)^#(?P<num>\d{1,4})(?:\s+(?P<title>[^\n]+))?\s*$")
+K_NUMBER_CHAPTER_RE = re.compile(
+    r"(?im)^\s*ⓚ\s*(?:제\s*)?(?P<num>\d{1,4})(?:\s*(?:화|회|장|편|챕터))?"
+    r"(?:[\s.:：_\-]+(?P<title>[^\n]*))?\s*$"
+)
+K_ENGLISH_CHAPTER_RE = re.compile(
+    r"(?im)^\s*ⓚ\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})"
+    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+)
+HASH_NUMBER_CHAPTER_RE = re.compile(
+    r"(?im)^\s*#{1,6}\s*(?:제\s*)?(?P<num>\d{1,4})(?:\s*(?:화|회|장|편|챕터))?"
+    r"(?:[\s.:：_\-]+(?P<title>[^\n]*))?\s*$"
+)
+HASH_ENGLISH_CHAPTER_RE = re.compile(
+    r"(?im)^\s*#{1,6}\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})"
+    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+)
 MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
 EPISODE_PREFIX_CHAPTER_RE = re.compile(
     r"(?im)^\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})[\s.:：_\-]*(?P<title>[^\n]*)$"
@@ -36,6 +50,13 @@ NUMBERED_CHAPTER_RE = re.compile(
     r"(?im)^\s*(?:제\s*)?(?P<num>\d{1,4})\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
     r"[\s.:：_\-]*(?P<title>[^\n]*)$"
 )
+HASH_PREFIX_RE = re.compile(r"^\s*#{1,6}\s*")
+K_PREFIX_RE = re.compile(r"^\s*ⓚ\s*")
+NUMBERED_CHAPTER_BODY_RE = re.compile(
+    r"(?im)^(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터)\b.*$"
+)
+ENGLISH_CHAPTER_BODY_RE = re.compile(r"(?im)^(?:chapter|ep(?:isode)?)\s*\d{1,4}\b.*$")
+PLAIN_NUMBER_HEADING_BODY_RE = re.compile(r"(?im)^\d{1,4}(?:\s*$|[\s.:：_\-]+.+$)")
 
 
 def safe_slug(value: str) -> str:
@@ -243,12 +264,23 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
     markers.extend(
         [
             {
-                "episode": match.group(1).zfill(3),
-                "title": "",
+                "episode": match.group("num").zfill(3),
+                "title": (match.group("title") or "").strip(),
                 "start": match.start(),
                 "end": match.end(),
             }
-            for match in CHAPTER_MARKER_RE.finditer(text)
+            for match in K_NUMBER_CHAPTER_RE.finditer(text)
+        ]
+    )
+    markers.extend(
+        [
+            {
+                "episode": match.group("num").zfill(3),
+                "title": (match.group("title") or "").strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in K_ENGLISH_CHAPTER_RE.finditer(text)
         ]
     )
     markers.extend(
@@ -260,6 +292,17 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
                 "end": match.end(),
             }
             for match in HASH_NUMBER_CHAPTER_RE.finditer(text)
+        ]
+    )
+    markers.extend(
+        [
+            {
+                "episode": match.group("num").zfill(3),
+                "title": (match.group("title") or "").strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+            for match in HASH_ENGLISH_CHAPTER_RE.finditer(text)
         ]
     )
     markers.extend(
@@ -300,6 +343,96 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
         ]
 
     return []
+
+
+def normalize_chapter_heading_markers(text: str) -> str:
+    raw_lines = text.splitlines(keepends=True)
+    has_numbered_heading = any(
+        is_chapter_heading_line(split_line_ending(raw_line)[0])
+        for raw_line in raw_lines
+    )
+    lines: list[str] = []
+    markdown_heading_index = 0
+    for raw_line in raw_lines:
+        line, newline = split_line_ending(raw_line)
+        if not has_numbered_heading and is_markdown_title_line(line):
+            markdown_heading_index += 1
+            normalized = normalize_markdown_title_heading_line(
+                line,
+                episode_index=markdown_heading_index,
+            )
+        else:
+            normalized = normalize_chapter_heading_line(line)
+        lines.append(normalized + newline)
+    if text and not lines:
+        return normalize_chapter_heading_line(text)
+    return "".join(lines)
+
+
+def split_line_ending(raw_line: str) -> tuple[str, str]:
+    if raw_line.endswith("\r\n"):
+        return raw_line[:-2], "\r\n"
+    if raw_line.endswith("\n"):
+        return raw_line[:-1], "\n"
+    if raw_line.endswith("\r"):
+        return raw_line[:-1], "\r"
+    return raw_line, ""
+
+
+def normalize_chapter_heading_line(line: str) -> str:
+    indent_match = re.match(r"^(\s*)", line)
+    indent = indent_match.group(1) if indent_match else ""
+    stripped = line.strip()
+    if not stripped:
+        return line
+
+    has_hash_marker = bool(HASH_PREFIX_RE.match(stripped))
+    body = HASH_PREFIX_RE.sub("", stripped, count=1).strip() if has_hash_marker else stripped
+    if K_PREFIX_RE.match(body):
+        body = K_PREFIX_RE.sub("", body, count=1).strip()
+        return f"{indent}ⓚ{body}" if body else line
+
+    if is_chapter_heading_body(body, allow_plain_number=has_hash_marker):
+        return f"{indent}ⓚ{body}"
+    return line
+
+
+def is_markdown_title_line(line: str) -> bool:
+    stripped = line.strip()
+    if not HASH_PREFIX_RE.match(stripped):
+        return False
+    body = HASH_PREFIX_RE.sub("", stripped, count=1).strip()
+    return bool(body)
+
+
+def normalize_markdown_title_heading_line(line: str, *, episode_index: int) -> str:
+    indent_match = re.match(r"^(\s*)", line)
+    indent = indent_match.group(1) if indent_match else ""
+    body = HASH_PREFIX_RE.sub("", line.strip(), count=1).strip()
+    return f"{indent}ⓚ제{episode_index}화 {body}" if body else line
+
+
+def is_chapter_heading_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    has_hash_marker = bool(HASH_PREFIX_RE.match(stripped))
+    body = HASH_PREFIX_RE.sub("", stripped, count=1).strip() if has_hash_marker else stripped
+    if K_PREFIX_RE.match(body):
+        body = K_PREFIX_RE.sub("", body, count=1).strip()
+        return is_chapter_heading_body(body, allow_plain_number=True)
+    return is_chapter_heading_body(body, allow_plain_number=has_hash_marker)
+
+
+def is_chapter_heading_body(body: str, *, allow_plain_number: bool = False) -> bool:
+    text = body.strip()
+    if not text:
+        return False
+    if NUMBERED_CHAPTER_BODY_RE.match(text):
+        return True
+    if ENGLISH_CHAPTER_BODY_RE.match(text):
+        return True
+    return allow_plain_number and bool(PLAIN_NUMBER_HEADING_BODY_RE.match(text))
 
 
 def dedupe_chapter_markers(markers: list[dict[str, Any]]) -> list[dict[str, Any]]:

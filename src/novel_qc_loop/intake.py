@@ -15,7 +15,18 @@ from typing import Any
 from .internal_paths import PANMU_TEAM_SSOT_NAS_ROOT
 from .package_qc import collect_epub_paths, inspect_epub_packages, natural_path_sort_key, write_epub_package_qc
 from .submission import write_manual_review_scaffold
-from .workspace import create_run, create_work, decode_text_bytes, inspect_text, read_json, read_text_auto, safe_slug, write_json
+from .workspace import (
+    create_run,
+    create_work,
+    decode_text_bytes,
+    inspect_text,
+    is_chapter_heading_line,
+    normalize_chapter_heading_markers,
+    read_json,
+    read_text_auto,
+    safe_slug,
+    write_json,
+)
 
 
 SUPPORTED_INPUT_SUFFIXES = {".txt", ".text", ".md", ".markdown", ".hwp", ".hwpx", ".epub"}
@@ -113,7 +124,7 @@ def read_document_collection_text(path: Path) -> str:
         if not body:
             continue
         if not begins_with_chapter_marker(body):
-            body = f"{index}화\n{body}"
+            body = f"ⓚ제{index}화\n{body}"
         parts.append(body)
     if not parts:
         raise ValueError(f"manuscript body text not found in folder: {path}")
@@ -130,7 +141,7 @@ def read_epub_collection_text(path: Path) -> str:
         if not body:
             continue
         if not begins_with_chapter_marker(body):
-            body = f"{index}화\n{body}"
+            body = f"ⓚ제{index}화\n{body}"
         parts.append(body)
     if not parts:
         raise ValueError(f"EPUB body text not found in folder: {path}")
@@ -138,13 +149,7 @@ def read_epub_collection_text(path: Path) -> str:
 
 
 def begins_with_chapter_marker(text: str) -> bool:
-    head = "\n".join(text.splitlines()[:5])
-    return bool(
-        re.search(
-            r"(?im)^\s*(?:ⓚ(?:제\s*)?\d{1,4}(?:\s*(?:화|회|장|편|챕터))?|(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)|(?:chapter|ep(?:isode)?)\s*\d{1,4})",
-            head,
-        )
-    )
+    return any(is_chapter_heading_line(line) for line in text.splitlines()[:5])
 
 
 def read_hwpx_text(path: Path) -> str:
@@ -487,7 +492,7 @@ def intake_manuscript(
     if not is_document_collection and input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
         raise ValueError(f"unsupported input type: {input_path.suffix}")
 
-    source_text = read_source_text(input_path)
+    source_text = normalize_chapter_heading_markers(read_source_text(input_path))
     inferred_title = title.strip() or infer_title(input_path, source_text)
     work_slug = unique_slug(workspace_root, slug or inferred_title)
     work_root = create_work(
