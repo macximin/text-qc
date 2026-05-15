@@ -18,6 +18,8 @@ intake 직후에는 추출 원고가 그대로 복사되어 있습니다. 검수
 
 검토용 diff는 `corrections/editorial_diff.md`에 생성됩니다.
 
+교정 적용 뒤에는 정합성 재평가를 반복하고, 각 iteration의 해결/신규/회귀 항목은 `llm-facing/consistency_correction_loop.md`에 남깁니다. 최종 원고 후보는 이 루프가 중단 가능 판정을 받은 뒤 갱신합니다.
+
 문맥형 오타 후보의 주변 원문은 `corrections/change_contexts.md`에 생성합니다.
 
 ```powershell

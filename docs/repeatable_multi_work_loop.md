@@ -75,7 +75,8 @@
 - `adversarial-audit`: 독자/심사자 관점 3회 감리.
 - `ai-slop-scan`: 특정 장르 취향을 강제하지 않고 AI 티, 반복 표현, 말투 균질화를 점검.
 - `correction-pass`: `ⓐ`/`ⓐⓐ` 교정안 생성.
-- `editorial-pass`: 적극 편집자 모드. replace/delete/insert_before/insert_after 기반 윤문, 중복 삭제, 브리지 추가. HWP/HWPX 대신 text 후보본과 Markdown diff를 사용.
+- `editorial-pass`: 적극 편집자 모드. 전역 정합성 3-pass와 화별 수동 딥다이브, 정합성 리포트 이후 replace/delete/insert_before/insert_after 기반 윤문, 중복 삭제, 브리지 추가를 수행. 회차별 공백 제외 4000자 기준을 정본 선택의 강한 원칙으로 보며, HWP/HWPX 대신 text 후보본과 Markdown diff를 사용.
+- `consistency-correction-loop`: 정합성 평가, 교정 batch, 후보본 적용, 정합성 재평가를 만족 기준까지 반복. 해결/신규/회귀/잔여 리스크를 누적해 최종 개선 보고서의 근거로 삼음.
 - `export-pass`: PDF/HWPX/HTML 산출과 확인.
 
 ## 자동 evidence 생성
@@ -98,6 +99,7 @@
 - `evidence/facts/timeline_summary.json`
 - `evidence/facts/character_title_matrix.json`
 - `evidence/review/hygiene_flags.jsonl`
+- `evidence/review/chapter_length_flags.jsonl`
 - `evidence/review/replay_candidates.jsonl`
 - `evidence/review/bridge_review_candidates.jsonl`
 - `evidence/review/era_review_candidates.jsonl`

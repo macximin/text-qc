@@ -18,6 +18,7 @@ Run: `{{run_id}}`
 - inspection: `evidence/inspection.json`
 - facts: `evidence/facts/`
 - review candidates: `evidence/review/`
+- 회차 분량 플래그: `evidence/review/chapter_length_flags.jsonl`
 - verisimilitude candidates: `evidence/review/verisimilitude_candidates.jsonl`
 - submission gate: `evidence/submission/submission_gate.json`
 
@@ -31,6 +32,7 @@ Run: `{{run_id}}`
 
 - `verisimilitude_candidates.jsonl`을 먼저 열어 작중 행동/상태/인과 충돌 후보를 확인한다.
 - 날짜, 시간, 금액, 지분율, 나이, 직함, 관계 호칭을 먼저 수집한다.
+- 회차별 공백 제외 글자수 `{{minimum_chapter_chars_no_space}}`자 미만 후보를 확인한다. 미달 회차는 결락, 중복, 분할 오류, 정본 선택 보류 후보로 본다.
 - 각 이슈는 최소 `회차`, `줄번호`, `증거 문장`, `왜 문제인지`, `수정 방향`을 남긴다.
 - 사소해 보여도 일단 모은다. 나중에 지우더라도 처음엔 넓게 잡는다.
 - 자동 evidence는 후보일 뿐이다. 작중 뉴스/단말기/문서 표기, 고의적 플래시백, 장르적 과장처럼 소설적 허용으로 방어 가능한 항목은 곧바로 확정 오류로 올리지 말고 반례와 함께 강등 또는 유보한다.
@@ -44,12 +46,14 @@ Run: `{{run_id}}`
 - 숫자면 동일 수치가 다른 장면에서 다시 어떻게 쓰이는지 확인한다.
 - 인물/직함이면 같은 이름이 다른 직함으로 불리는 장면을 모아 실제 변화인지 drift인지 판정한다.
 - replay 후보면 lawful repetition과 lazy replay를 구분한다.
+- 중복 회차가 있으면 어느 블록을 살릴지 판단하기 전에 양쪽의 분량, 파일명 범위, 앞뒤 사건 spine을 함께 대조한다.
 
 ## Pass 3. 폐쇄 감리
 
 - 앞선 두 패스에서 `문제 없음` 처리한 항목을 다시 의심한다.
 - 최종 산출물에는 `확정 이슈`, `유보 이슈`, `근거 부족으로 보류한 의심점`을 분리한다.
 - 최종 보고 전 `정말 수정 가치가 있나`를 다시 검산한다.
+- 편집자 모드로 넘길 항목과 화별 딥다이브에서 다시 읽어야 할 항목을 분리한다.
 - P0/P1은 최종 감리에서 `확정`, `confidence_percent >= 95`, 직접 근거 있음, 미해결 반례 없음, 작중 핍진성 영향이 모두 맞는 항목만 유지한다.
 - 단순 외부 고증은 `story_internal_impact`가 분명하지 않으면 P2/P3 또는 유보로 낮춘다.
 - 대체 해석, 소설적 허용, 앞뒤 문맥상 방어가 남은 항목은 P2/P3로 강등하거나 철회/유보한다.
@@ -73,7 +77,11 @@ Run: `{{run_id}}`
 
 - `llm-facing/global_audit_raw.md`
 - `llm-facing/adversarial_audit_3pass.md`
+- `llm-facing/episode_deep_dive.md`로 넘길 회차별 수동 독해 큐
+- `llm-facing/consistency_correction_loop.md`로 넘길 재평가 대상
 - `evidence/submission/manual_review_submission.json`
 - `human-facing/one_page_report.md`
 
 최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`를 통과해야 제출 가능하다.
+
+편집자 모드는 이 3-pass와 `llm-facing/episode_deep_dive.md`, `llm-facing/consistency_report.md`가 채워진 뒤에만 실행한다. 교정 적용 뒤에는 같은 축으로 재평가하고, 해결/신규/회귀를 loop 기록에 남긴다.

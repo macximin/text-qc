@@ -51,6 +51,7 @@ workspace/
 - `adversarial-audit`: 독자/심사자 관점의 적대적 감리
 - `correction-pass`: 교정안 생성과 승인 추적
 - `editorial-pass`: 적극 편집자 모드. 문장 단위 윤문, 중복 삭제, 브리지 추가, AI 티 완화. 기본 산출물은 plain text 후보본과 Markdown diff.
+- `consistency-correction-loop`: 교정 적용 후 정합성을 다시 읽고 해결/신규/회귀/잔여 리스크를 반복 기록. 최종 개선 보고서의 Before/After 근거로 사용.
 - `export-pass`: PDF/HWPX/HTML export 검증
 
 ## Report 계층

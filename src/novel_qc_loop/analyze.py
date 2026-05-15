@@ -8,9 +8,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .models import MIN_CHAPTER_CHARS_NO_SPACE
 from .narrative import classify_bracketed_line
 from .reports import require_completed_manual_review, validate_human_report
 from .submission import validate_manual_review_submission, write_manual_review_scaffold
+from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitle_rows
 from .verisimilitude import extract_verisimilitude_candidates
 from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
 
@@ -135,6 +137,9 @@ class AnalysisResult:
     inspection_path: str
     episodes_dir: str
     chapter_metrics_path: str
+    chapter_length_flags_path: str
+    chapter_subtitles_path: str
+    subtitle_consistency_flags_path: str
     absolute_dates_path: str
     relative_times_path: str
     dates_path: str
@@ -190,7 +195,18 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     write_json(inspection_path, inspection.to_dict())
 
     chapter_metrics_path = facts_dir / "chapter_metrics.jsonl"
-    write_jsonl(chapter_metrics_path, build_chapter_metrics(chapters))
+    chapter_metrics = build_chapter_metrics(chapters)
+    write_jsonl(chapter_metrics_path, chapter_metrics)
+    chapter_length_flags_path = review_dir / "chapter_length_flags.jsonl"
+    write_jsonl(chapter_length_flags_path, build_chapter_length_flags(chapter_metrics))
+    chapter_subtitles_path = facts_dir / "chapter_subtitles.jsonl"
+    chapter_subtitle_rows = extract_chapter_subtitle_rows(text)
+    write_jsonl(chapter_subtitles_path, chapter_subtitle_rows)
+    subtitle_consistency_flags_path = review_dir / "subtitle_consistency_flags.jsonl"
+    write_jsonl(
+        subtitle_consistency_flags_path,
+        build_subtitle_consistency_flags(chapter_subtitle_rows),
+    )
 
     absolute_dates_path = facts_dir / "absolute_dates.jsonl"
     relative_times_path = facts_dir / "relative_times.jsonl"
@@ -272,6 +288,8 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             narrative_allowances_path=narrative_allowances_path,
             replay_candidates_path=replay_candidates_path,
             bridge_candidates_path=bridge_candidates_path,
+            chapter_length_flags_path=chapter_length_flags_path,
+            subtitle_consistency_flags_path=subtitle_consistency_flags_path,
             era_candidates_path=era_candidates_path,
             ai_slop_path=ai_slop_path,
             human_report_path=run_root / "human-facing" / "one_page_report.md",
@@ -283,6 +301,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     manifest["artifacts"].update(
         {
             "chapter_metrics_path": str(chapter_metrics_path),
+            "chapter_length_flags_path": str(chapter_length_flags_path),
+            "chapter_subtitles_path": str(chapter_subtitles_path),
+            "subtitle_consistency_flags_path": str(subtitle_consistency_flags_path),
             "episodes_dir": str(episodes_dir),
             "absolute_dates_path": str(absolute_dates_path),
             "relative_times_path": str(relative_times_path),
@@ -320,6 +341,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         inspection_path=str(inspection_path),
         episodes_dir=str(episodes_dir),
         chapter_metrics_path=str(chapter_metrics_path),
+        chapter_length_flags_path=str(chapter_length_flags_path),
+        chapter_subtitles_path=str(chapter_subtitles_path),
+        subtitle_consistency_flags_path=str(subtitle_consistency_flags_path),
         absolute_dates_path=str(absolute_dates_path),
         relative_times_path=str(relative_times_path),
         dates_path=str(dates_path),
@@ -405,19 +429,49 @@ def build_chapter_metrics(chapters: list[dict[str, Any]]) -> list[dict[str, Any]
     rows = []
     for chapter in chapters:
         body = str(chapter["text"])
+        chars_no_space = len(re.sub(r"\s+", "", body))
         lines = body.splitlines()
         nonempty = [line for line in lines if line.strip()]
         rows.append(
             {
                 "episode": chapter["episode"],
                 "chars": len(body),
-                "chars_no_space": len(re.sub(r"\s+", "", body)),
+                "chars_no_space": chars_no_space,
+                "minimum_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE,
+                "meets_minimum_chars_no_space": chars_no_space >= MIN_CHAPTER_CHARS_NO_SPACE,
+                "under_minimum_chars_no_space_by": max(
+                    0,
+                    MIN_CHAPTER_CHARS_NO_SPACE - chars_no_space,
+                ),
                 "line_count": len(lines),
                 "nonempty_line_count": len(nonempty),
                 "long_lines_120": sum(1 for line in nonempty if len(line) >= 120),
                 "long_lines_200": sum(1 for line in nonempty if len(line) >= 200),
                 "bang_count": body.count("!"),
                 "question_count": body.count("?"),
+            }
+        )
+    return rows
+
+
+def build_chapter_length_flags(chapter_metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for metric in chapter_metrics:
+        chars_no_space = int(metric.get("chars_no_space") or 0)
+        if chars_no_space >= MIN_CHAPTER_CHARS_NO_SPACE:
+            continue
+        rows.append(
+            {
+                "kind": "chapter_under_minimum_chars",
+                "episode": metric.get("episode", ""),
+                "chars_no_space": chars_no_space,
+                "minimum_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE,
+                "deficit_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE - chars_no_space,
+                "severity": "P1",
+                "review_hint": (
+                    "회차 정본 후보는 공백 제외 4000자 이상을 원칙으로 합니다. "
+                    "중복 회차 삭제나 정본 선택 전 분량과 앞뒤 정합성을 함께 확인합니다."
+                ),
             }
         )
     return rows
@@ -978,6 +1032,8 @@ def build_submission_gate(
     narrative_allowances_path: Path,
     replay_candidates_path: Path,
     bridge_candidates_path: Path,
+    chapter_length_flags_path: Path,
+    subtitle_consistency_flags_path: Path,
     era_candidates_path: Path,
     ai_slop_path: Path,
     human_report_path: Path,
@@ -988,6 +1044,8 @@ def build_submission_gate(
     narrative_allowance_count = count_jsonl_rows(narrative_allowances_path)
     replay_count = count_jsonl_rows(replay_candidates_path)
     bridge_count = count_jsonl_rows(bridge_candidates_path)
+    chapter_length_flag_count = count_jsonl_rows(chapter_length_flags_path)
+    subtitle_consistency_flag_count = count_jsonl_rows(subtitle_consistency_flags_path)
     era_count = count_jsonl_rows(era_candidates_path)
     ai_slop_summary = read_json(ai_slop_path) if ai_slop_path.exists() else {}
     human_report: dict[str, Any] | None = None
@@ -996,6 +1054,8 @@ def build_submission_gate(
         blockers.append("stage_cues_present")
     if hygiene_count > 0:
         blockers.append("hygiene_flags_present")
+    if chapter_length_flag_count > 0 or inspection.get("under_min_chapter_chars_no_space"):
+        blockers.append("chapter_under_minimum_chars")
     manual_ready = False
     manual_review: dict[str, Any] | None = None
     if manual_review_submission_path.exists():
@@ -1040,6 +1100,25 @@ def build_submission_gate(
         ),
         "replay_candidate_count": replay_count,
         "bridge_candidate_count": bridge_count,
+        "chapter_length_flag_count": chapter_length_flag_count,
+        "subtitle_consistency_flag_count": subtitle_consistency_flag_count,
+        "subtitle_policy": {
+            "rule": (
+                "소제목은 무단 수정하지 않습니다. 회차별 소제목 유무가 불균형하면 "
+                "더 적은 쪽에 ⓐⓐ 의견으로 삭제 후보 또는 추가 후보를 남깁니다."
+            )
+        },
+        "chapter_length_policy": {
+            "minimum_chars_no_space": inspection.get(
+                "minimum_chapter_chars_no_space",
+                MIN_CHAPTER_CHARS_NO_SPACE,
+            ),
+            "under_min_chapter_chars_no_space": inspection.get(
+                "under_min_chapter_chars_no_space",
+                {},
+            ),
+            "rule": "회차별 공백 제외 글자수는 4000자 이상을 원칙으로 합니다.",
+        },
         "era_candidate_count": era_count,
         "ai_slop": {
             "score_0_100": ai_slop_summary.get("score_0_100", 0),

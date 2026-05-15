@@ -79,8 +79,14 @@ workspace/{work_slug}/
       task_brief.md
       handoff_checklist.md
       adversarial_3pass_brief.md
+      episode_deep_dive_brief.md
+      episode_deep_dive.md
+      consistency_report.md
+      correction_plan.md
+      consistency_correction_loop.md
     human-facing/
       one_page_report.md
+      final_improvement_report.md
     corrections/
       marker_protocol.md
       changes.json
@@ -106,13 +112,19 @@ workspace/{work_slug}/
 - `editor` / `편집`: 적극 편집자 모드. 중복 삭제, 문장 윤문, 빠진 브리지 추가, AI 티 완화까지 포함
 - `full` / `전체`: 검수, 적대적 감리, 교정안, human-facing 보고서, 최종 원고 후보까지
 
-편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다.
+편집자 모드는 정합성 우선 편집 게이트를 거칩니다. 전역 정합성 3-pass 이후 `llm-facing/episode_deep_dive.md`와 `llm-facing/consistency_report.md`에 화별 수동 독해와 편집 진입 판정을 남긴 뒤 `corrections/changes.json`을 작성합니다.
+
+회차별 공백 제외 글자수는 4000자 이상을 강한 원칙으로 둡니다. `inspection.json`과 `facts/chapter_metrics.jsonl`에는 기준과 회차별 충족 여부가 남고, 미달 회차는 `evidence/review/chapter_length_flags.jsonl`과 `submission_gate.json`에 blocker 후보로 남습니다.
+
+편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다. 중간 확인이 필요하면 `render-marked-manuscript-hwpx`로 원문 순서 그대로 기호가 들어간 HWPX 검토본을 생성합니다.
+
+정합성 평가와 교정은 반복합니다. `llm-facing/correction_plan.md`에 교정 batch를 만들고, 적용 후 `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀/잔여 리스크를 남깁니다. 최종 개선은 `human-facing/final_improvement_report.md`에 Before/After와 근거 중심으로 정리합니다.
 
 문맥형 오타 확인은 `render-change-contexts`로 `corrections/change_contexts.md`를 만든 뒤 진행합니다. `edit_class=contextual_typo` 변경안은 앞뒤 문맥 근거와 `reading_basis`를 가져야 합니다.
 
 ## Human-facing 보고서
 
-기본 보고서는 `human-facing/one_page_report.md` 하나입니다.
+기본 빠른 보고서는 `human-facing/one_page_report.md` 하나입니다. 반복 루프 이후 최종 개선 요약은 `human-facing/final_improvement_report.md`에 둡니다.
 
 중간 분석, 긴 체크리스트, 모델에게 넘길 지시는 `llm-facing/`에 둡니다. 작가/편집자에게 바로 보여줄 문서는 기본적으로 1장만 유지합니다.
 
@@ -122,6 +134,7 @@ workspace/{work_slug}/
 
 - `evidence/facts/timeline_summary.json`: 시간 표현이 몰린 회차 후보.
 - `evidence/facts/character_title_matrix.json`: 인물/직함 drift 후보.
+- `evidence/review/chapter_length_flags.jsonl`: 공백 제외 4000자 미만 회차 후보.
 - `evidence/review/bridge_review_candidates.jsonl`: 앞뒤 화 연결 후보.
 - `evidence/submission/manual_review_queue.jsonl`: 3-pass x 감리 축 작업 큐.
 - `evidence/submission/manual_review_submission.json`: 최종 감리자가 채워 넣는 제출 파일.

@@ -12,6 +12,7 @@ from .corrections import (
     validate_changes_file,
     write_validation_result,
 )
+from .hwpx_review import render_marked_manuscript_hwpx
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
 from .reports import (
@@ -173,6 +174,78 @@ def cmd_render_change_contexts(args: argparse.Namespace) -> int:
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
+
+
+def cmd_render_marked_manuscript_hwpx(args: argparse.Namespace) -> int:
+    if not args.run_root and not (args.source and args.changes):
+        raise SystemExit("use --run-root or provide both --source and --changes")
+
+    run_root = Path(args.run_root).resolve() if args.run_root else None
+    manifest: dict[str, Any] = {}
+    if run_root:
+        manifest_path = run_root / "run_manifest.json"
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+
+    source_path = (
+        Path(args.source).resolve()
+        if args.source
+        else resolve_review_source_path(run_root, manifest)
+    )
+    changes_path = (
+        Path(args.changes).resolve()
+        if args.changes
+        else run_root / "corrections" / "changes.json"
+    )
+    loop_label = args.loop_label.strip()
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else (
+            run_root
+            / "human-facing"
+            / (f"{loop_label}_marked_manuscript.hwpx" if loop_label else "marked_manuscript.hwpx")
+            if run_root
+            else changes_path.with_name(
+                f"{loop_label}_marked_manuscript.hwpx" if loop_label else "marked_manuscript.hwpx"
+            )
+        )
+    )
+    result = render_marked_manuscript_hwpx(
+        source_path=source_path,
+        changes_path=changes_path,
+        output_path=output_path,
+        loop_label=loop_label,
+        title=args.title,
+        include_manual_notes=not args.no_manual_notes,
+    )
+    if run_root:
+        manifest.setdefault("artifacts", {})
+        key = (
+            f"{loop_label}_marked_manuscript_hwpx_path"
+            if loop_label
+            else "marked_manuscript_hwpx_path"
+        )
+        manifest["artifacts"][key] = str(output_path)
+        write_json(run_root / "run_manifest.json", manifest)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def resolve_review_source_path(run_root: Path, manifest: dict[str, Any]) -> Path:
+    for value in (
+        manifest.get("source_text_path"),
+        manifest.get("artifacts", {}).get("extracted_text_path"),
+        manifest.get("artifacts", {}).get("final_manuscript_path"),
+    ):
+        if not value:
+            continue
+        path = Path(str(value))
+        if not path.is_absolute():
+            path = (run_root / path).resolve()
+        if path.exists():
+            return path
+    return run_root / "final_manuscript" / "final_manuscript.txt"
 
 
 def cmd_validate_submission(args: argparse.Namespace) -> int:
@@ -716,6 +789,23 @@ def build_parser() -> argparse.ArgumentParser:
     change_contexts.add_argument("--window-chars", type=int, default=360)
     change_contexts.add_argument("--contextual-only", action="store_true", help="render only contextual edit classes")
     change_contexts.set_defaults(func=cmd_render_change_contexts)
+
+    marked_hwpx = subparsers.add_parser(
+        "render-marked-manuscript-hwpx",
+        help="render the full source manuscript with visible ⓐ/ⓐⓐ markers inserted in order",
+    )
+    marked_hwpx.add_argument("--run-root", help="run folder; defaults paths from run_manifest and corrections/")
+    marked_hwpx.add_argument("--source", help="source text path; default: run manifest source/extracted text")
+    marked_hwpx.add_argument("--changes", help="changes JSON path; default: RUN/corrections/changes.json")
+    marked_hwpx.add_argument("--output", help="HWPX output path; default: RUN/human-facing/*_marked_manuscript.hwpx")
+    marked_hwpx.add_argument("--loop-label", default="", help="label used in output name, e.g. loop_01")
+    marked_hwpx.add_argument("--title", default="", help="document title")
+    marked_hwpx.add_argument(
+        "--no-manual-notes",
+        action="store_true",
+        help="skip generated opinion notes",
+    )
+    marked_hwpx.set_defaults(func=cmd_render_marked_manuscript_hwpx)
 
     validate_submission = subparsers.add_parser("validate-submission", help="validate manual review submission JSON")
     validate_submission.add_argument("--submission")

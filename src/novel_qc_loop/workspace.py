@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import RunManifest, TextInspection, WorkManifest
+from .models import MIN_CHAPTER_CHARS_NO_SPACE, RunManifest, TextInspection, WorkManifest
 from .narrative import classify_bracketed_lines
 
 
@@ -226,11 +226,12 @@ def create_run(
             "01_intake": "pending",
             "02_global_audit": "pending",
             "03_adversarial_audit": "pending",
-            "04_editorial_pass": "pending",
-            "05_correction_plan": "pending",
-            "06_human_facing_report": "pending",
-            "07_final_manuscript": "pending",
-            "08_export": "pending",
+            "04_episode_deep_dive": "pending",
+            "05_editorial_pass": "pending",
+            "06_consistency_correction_loop": "pending",
+            "07_human_facing_report": "pending",
+            "08_final_manuscript": "pending",
+            "09_export": "pending",
         },
     )
     write_json(run_root / "run_manifest.json", run_manifest.to_dict())
@@ -344,6 +345,11 @@ def inspect_text(path: Path) -> TextInspection:
             seen_episodes[episode] = seen_episodes.get(episode, 0) + 1
             key = episode if seen_episodes[episode] == 1 else f"{episode}_{seen_episodes[episode]}"
             chapter_chars[key] = len(re.sub(r"\s+", "", body))
+    under_min_chapter_chars = {
+        episode: chars
+        for episode, chars in chapter_chars.items()
+        if chars < MIN_CHAPTER_CHARS_NO_SPACE
+    }
 
     avg_len = round(sum(lengths) / len(lengths), 1) if lengths else 0.0
     return TextInspection(
@@ -363,5 +369,7 @@ def inspect_text(path: Path) -> TextInspection:
         stage_cue_candidates=len(bracketed_rows),
         stage_cues_allowed_by_narrative_context=len(allowed_stage_cues),
         chapter_count=len(chapter_markers),
+        minimum_chapter_chars_no_space=MIN_CHAPTER_CHARS_NO_SPACE,
         chapter_chars_no_space=chapter_chars,
+        under_min_chapter_chars_no_space=under_min_chapter_chars,
     )

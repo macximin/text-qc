@@ -10,6 +10,23 @@ Run: `{{run_id}}`
 
 단, 글 자체를 새로 쓰는 단계는 아닙니다. 플롯, 인물의 결정, POV, 사건 결과, 세계관 사실, 고유명사 설정은 원문과 감리 evidence에 근거가 있을 때만 손댑니다.
 
+## 정합성 우선 편집 게이트
+
+편집자 모드는 바로 문장을 고치는 단계가 아닙니다. 반드시 아래 산출물을 먼저 읽고, 정합성 판단으로 확정된 항목만 `corrections/changes.json`에 올립니다.
+
+- `llm-facing/adversarial_audit_3pass.md`
+- `llm-facing/episode_deep_dive.md`
+- `llm-facing/consistency_report.md`
+- `evidence/submission/manual_review_submission.json`
+
+`episode_deep_dive.md` 또는 `consistency_report.md`가 비어 있거나, `작성 필요`, `편집자 모드 진입 가능 여부: 불가` 상태이면 적극 편집 후보를 작성하지 않습니다. 자동 evidence만 보고 삭제, 추가, 정본 선택, 문장 윤문을 확정하지 않습니다.
+
+회차별 공백 제외 글자수는 `{{minimum_chapter_chars_no_space}}`자 이상을 강한 원칙으로 봅니다. `evidence/review/chapter_length_flags.jsonl`에 미달 회차가 있으면 편집자 모드는 삭제부터 하지 않고, 결락/중복/분할 오류/브리지 필요성을 먼저 닫습니다.
+
+소제목은 무단 수정하지 않습니다. 소제목이 있는 회차와 없는 회차가 섞이면 `evidence/facts/chapter_subtitles.jsonl`과 `evidence/review/subtitle_consistency_flags.jsonl`을 확인합니다. 더 적은 쪽에만 `ⓐⓐ(의견: ...)`으로 남기며, 소제목 있는 회차가 소수이면 삭제 후보, 소제목 없는 회차가 소수이면 기존 소제목과 유사한 추가 후보로 표시합니다.
+
+원문 기호는 보존합니다. `ⓚ`, 대괄호 UI, 회차 제목, 특수기호는 송고 위생 문제인지 작중 장치인지 먼저 판정하고, 삭제가 필요하면 근거와 반례 검토를 남깁니다.
+
 ## 편집 원칙
 
 - 같은 정보가 반복되면 삭제하거나 한 문장으로 압축합니다.
@@ -25,7 +42,9 @@ Run: `{{run_id}}`
 
 모든 실제 수정 후보는 `corrections/changes.json`에 남깁니다. `find`는 원문에서 실제로 찾을 수 있는 텍스트여야 하며, insertion에서도 위치 앵커로 사용합니다.
 
-편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. 변경안은 plain text에 적용하고, 결과는 `final_manuscript/editorial_candidate.txt`, 검토용 차이는 `corrections/editorial_diff.md`로 봅니다.
+편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. 변경안은 plain text에 적용하고, 결과는 `final_manuscript/editorial_candidate.txt`, 검토용 차이는 `corrections/editorial_diff.md`로 봅니다. 다만 중간 확인용으로는 `render-marked-manuscript-hwpx`를 사용해 원문 순서 그대로 기호가 들어간 HWPX를 생성합니다.
+
+정합성 평가와 교정은 반복합니다. 편집 후보를 적용한 뒤에는 같은 회차와 연결 회차를 다시 읽고, `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀 항목을 분리합니다. 이 루프가 닫히기 전에는 최종 개선 보고서에 “해결됨”이라고 쓰지 않습니다.
 
 ```json
 [
@@ -79,6 +98,8 @@ Run: `{{run_id}}`
 - `ⓐ`: 의미와 말투를 거의 건드리지 않는 확정 정리. 명백한 중복 삭제, 문장부호, 조사, 오탈자.
 - `ⓐⓐ`: 문장 호흡, 말투, 장면 브리지, AI 티 제거, 정보 압축처럼 작가 의도 가능성이 있는 적극 편집.
 
+중복 회차는 별도 기준을 적용합니다. 완전 동일 중복은 `ⓐ(삭제)` 후보로 올릴 수 있지만, 비동일 중복은 먼저 `ⓐⓐ(정본 선택)`으로 판단합니다. 정본 후보는 공백 제외 `{{minimum_chapter_chars_no_space}}`자 이상이어야 하며, 삭제 후 남는 정본이 이 기준을 밑돌면 `ⓐ(삭제)`로 닫지 말고 결락/추가/정본 선택 보류로 남깁니다. 정본이 결정된 뒤 비정본 블록 삭제는 `ⓐ(삭제)` 후보로 처리합니다. 삭제본에만 있는 문장 이식은 자동 병합하지 않고 `ⓐⓐ(이식 후보)`로 분리합니다.
+
 ## 텍스트 적용
 
 ```powershell
@@ -95,3 +116,4 @@ Run: `{{run_id}}`
 - 장르적 과장, 의도적 반복, 리듬 장치를 AI 티로 단정하지 않습니다.
 - `ⓐⓐ`를 승인 없이 최종 원고에 확정 반영하지 않습니다.
 - 편집자 모드 기본 산출물에 HWP/HWPX 파란줄 작업을 끼워 넣지 않습니다.
+- 전역 3-pass와 화별 딥다이브 없이 자동 evidence만 보고 `changes.json`을 채우지 않습니다.

@@ -454,6 +454,15 @@ def render_template(template: str, values: dict[str, Any]) -> str:
     return rendered
 
 
+def format_chapter_length_summary(chapter_lengths: dict[str, int], *, minimum: int) -> str:
+    under_min = [
+        f"{episode}: {chars}자(-{minimum - chars})"
+        for episode, chars in chapter_lengths.items()
+        if chars < minimum
+    ]
+    return ", ".join(under_min) if under_min else "없음"
+
+
 def intake_manuscript(
     *,
     input_path: Path,
@@ -561,6 +570,11 @@ def intake_manuscript(
         "char_count": inspection.char_count,
         "chars_no_space": inspection.chars_no_space,
         "chapter_count": inspection.chapter_count,
+        "minimum_chapter_chars_no_space": inspection.minimum_chapter_chars_no_space,
+        "under_min_chapter_chars_no_space_summary": format_chapter_length_summary(
+            inspection.chapter_chars_no_space,
+            minimum=inspection.minimum_chapter_chars_no_space,
+        ),
         "long_lines_120": inspection.long_lines_120,
         "long_lines_200": inspection.long_lines_200,
         "manual_review_queue_path": str(manual_paths["queue_path"]),
@@ -571,8 +585,14 @@ def intake_manuscript(
     one_page_report_path = run_root / "human-facing" / "one_page_report.md"
     checklist_path = run_root / "llm-facing" / "handoff_checklist.md"
     adversarial_brief_path = run_root / "llm-facing" / "adversarial_3pass_brief.md"
+    episode_deep_dive_brief_path = run_root / "llm-facing" / "episode_deep_dive_brief.md"
+    episode_deep_dive_path = run_root / "llm-facing" / "episode_deep_dive.md"
+    consistency_report_path = run_root / "llm-facing" / "consistency_report.md"
     editorial_brief_path = run_root / "llm-facing" / "editorial_pass_brief.md"
     contextual_typo_brief_path = run_root / "llm-facing" / "contextual_typo_brief.md"
+    correction_plan_path = run_root / "llm-facing" / "correction_plan.md"
+    consistency_correction_loop_path = run_root / "llm-facing" / "consistency_correction_loop.md"
+    final_improvement_report_path = run_root / "human-facing" / "final_improvement_report.md"
     correction_protocol_path = run_root / "corrections" / "marker_protocol.md"
     changes_path = run_root / "corrections" / "changes.json"
     final_readme_path = run_root / "final_manuscript" / "README.md"
@@ -582,8 +602,22 @@ def intake_manuscript(
     _render_file(templates_root / "human_facing_one_page.md", one_page_report_path, values)
     _render_file(templates_root / "llm_handoff_checklist.md", checklist_path, values)
     _render_file(templates_root / "adversarial_3pass_brief.md", adversarial_brief_path, values)
+    _render_file(templates_root / "episode_deep_dive_brief.md", episode_deep_dive_brief_path, values)
+    _render_file(templates_root / "episode_deep_dive.empty.md", episode_deep_dive_path, values)
+    _render_file(templates_root / "consistency_report.empty.md", consistency_report_path, values)
     _render_file(templates_root / "editorial_pass_brief.md", editorial_brief_path, values)
     _render_file(templates_root / "contextual_typo_brief.md", contextual_typo_brief_path, values)
+    _render_file(templates_root / "correction_plan.empty.md", correction_plan_path, values)
+    _render_file(
+        templates_root / "consistency_correction_loop.empty.md",
+        consistency_correction_loop_path,
+        values,
+    )
+    _render_file(
+        templates_root / "final_improvement_report.empty.md",
+        final_improvement_report_path,
+        values,
+    )
     _render_file(templates_root / "correction_marker_protocol.md", correction_protocol_path, values)
     _render_file(templates_root / "correction_changes.empty.json", changes_path, values)
     _render_file(templates_root / "final_manuscript_readme.md", final_readme_path, values)
@@ -599,8 +633,14 @@ def intake_manuscript(
         "one_page_report_path": str(one_page_report_path),
         "llm_task_brief_path": str(llm_task_brief_path),
         "adversarial_brief_path": str(adversarial_brief_path),
+        "episode_deep_dive_brief_path": str(episode_deep_dive_brief_path),
+        "episode_deep_dive_path": str(episode_deep_dive_path),
+        "consistency_report_path": str(consistency_report_path),
         "editorial_brief_path": str(editorial_brief_path),
         "contextual_typo_brief_path": str(contextual_typo_brief_path),
+        "correction_plan_path": str(correction_plan_path),
+        "consistency_correction_loop_path": str(consistency_correction_loop_path),
+        "final_improvement_report_path": str(final_improvement_report_path),
         "correction_protocol_path": str(correction_protocol_path),
         "changes_path": str(changes_path),
         "manual_review_queue_path": str(manual_paths["queue_path"]),

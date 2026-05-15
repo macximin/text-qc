@@ -42,7 +42,7 @@
 
 - 말이 되는가
 - 시간/장소/인물/수치가 깨지지 않았는가
-- 화당 기준 분량을 넘는가
+- 화당 기준 분량, 즉 공백 제외 4000자를 넘는가
 - 장르 톤을 크게 해치는 표현이 있는가
 - 독자가 억지 전개라고 느낄 지점이 있는가
 
@@ -75,7 +75,7 @@ Pass 3: AI 티/문체
 .\scripts\novel-qc-loop.ps1 validate-submission --run-root "workspace\{work}\runs\{run_id}"
 ```
 
-## 4. 교정안 작성
+## 4. 교정안 작성과 반복 재평가
 
 교정은 검수와 분리합니다.
 
@@ -85,15 +85,21 @@ Pass 3: AI 티/문체
 - 적극 편집자 모드에서는 `replace`, `delete`, `insert_before`, `insert_after`로 문장 단위 윤문과 브리지 추가까지 구조화합니다.
 - 추가 작업의 `find`는 빈 값이 아니라 실제 원문 위치를 잡는 앵커입니다.
 - 편집자 모드 적용본은 HWP/HWPX가 아니라 `apply-changes-text`로 plain text 후보본과 Markdown diff를 만듭니다.
+- 중간 확인용 HWPX는 `render-marked-manuscript-hwpx`로 원문 순서 그대로 기호를 삽입한 검토본을 만듭니다.
+- 편집자 모드는 전역 정합성 3-pass, 화별 수동 딥다이브, 정합성 리포트 이후에만 실행합니다.
+- 중복 회차 정본 선택에서는 공백 제외 4000자 이상을 강한 원칙으로 삼고, 삭제 후 남는 회차가 4000자 미만이면 삭제 확정 대신 결락/추가/보류로 둡니다.
 - 문맥형 오타는 `edit_class=contextual_typo`로 올리고, `reading_basis`와 앞뒤 문맥 근거를 남깁니다.
+- 교정 적용 후 같은 회차와 앞뒤 회차를 다시 읽고, 해결/신규/회귀/잔여 리스크를 분리합니다.
+- 이 반복은 만족 기준을 통과할 때까지 `llm-facing/consistency_correction_loop.md`에 누적합니다.
 
 ```powershell
 .\scripts\novel-qc-loop.ps1 render-change-contexts --run-root "workspace\{work}\runs\{run_id}" --contextual-only
+.\scripts\novel-qc-loop.ps1 render-marked-manuscript-hwpx --run-root "workspace\{work}\runs\{run_id}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}"
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}" --accept-aa
 ```
 
-## 5. human-facing 보고서
+## 5. human-facing 보고서와 최종 개선 보고서
 
 내부 감리 결과를 작가/편집자가 읽을 수 있게 바꿉니다.
 
@@ -103,11 +109,13 @@ Pass 3: AI 티/문체
 - 문제, 근거, 리스크, 수정 방향을 분리합니다.
 - 원문 위치, 원문 인용, 수치, 반복 횟수, 앞뒤 문맥 중 하나 이상을 근거로 남깁니다.
 - 가능한 경우 비유를 붙여 체감되게 설명합니다.
+- 최종 개선 보고서는 Before/After, 개선 근거, 잔여 리스크, 작가 판단 항목을 분리합니다.
 
 최종 전달 전에는 보고서도 검증합니다.
 
 ```powershell
 .\scripts\novel-qc-loop.ps1 validate-report --run-root "workspace\{work}\runs\{run_id}"
+.\scripts\novel-qc-loop.ps1 validate-report --report "workspace\{work}\runs\{run_id}\human-facing\final_improvement_report.md"
 ```
 
 ## 6. export

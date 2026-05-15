@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 
+MIN_CHAPTER_CHARS_NO_SPACE = 4000
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -62,7 +65,9 @@ class TextInspection:
     stage_cue_candidates: int
     stage_cues_allowed_by_narrative_context: int
     chapter_count: int
+    minimum_chapter_chars_no_space: int
     chapter_chars_no_space: dict[str, int]
+    under_min_chapter_chars_no_space: dict[str, int]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
