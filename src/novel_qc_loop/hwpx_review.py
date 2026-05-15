@@ -17,8 +17,12 @@ BLACK_CHARPR = "0"
 BLUE_CHARPR = "1"
 LINE_CHARS = 230
 HWP_UNIT_PER_MM = 7200 / 25.4
-HWPX_CHARS_PER_LINE = 42
-LINE_HEIGHT = 1600
+HWPX_FONT_HEIGHT = 2000
+HWPX_CHARS_PER_LINE = 24
+LINE_HEIGHT = 3200
+LINE_SEG_TEXT_HEIGHT = 2000
+LINE_SEG_BASELINE = 1700
+LINE_SEG_SPACING = 1200
 HWPX_PAGE_WIDTH = round(210.0 * HWP_UNIT_PER_MM)
 HWPX_PAGE_HEIGHT = round(297.0 * HWP_UNIT_PER_MM)
 HWPX_MARGIN_TOP = round(20.0 * HWP_UNIT_PER_MM)
@@ -679,8 +683,9 @@ def line_seg_array(vert: int, line_count: int) -> str:
         textpos = line_index * HWPX_CHARS_PER_LINE
         line_vert = vert + (line_index * LINE_HEIGHT)
         segments.append(
-            f'<hp:lineseg textpos="{textpos}" vertpos="{line_vert}" vertsize="1000" '
-            'textheight="1000" baseline="850" spacing="600" horzpos="0" '
+            f'<hp:lineseg textpos="{textpos}" vertpos="{line_vert}" '
+            f'vertsize="{LINE_SEG_TEXT_HEIGHT}" textheight="{LINE_SEG_TEXT_HEIGHT}" '
+            f'baseline="{LINE_SEG_BASELINE}" spacing="{LINE_SEG_SPACING}" horzpos="0" '
             f'horzsize="{HWPX_TEXT_WIDTH}" flags="393216"/>'
         )
     return "<hp:linesegarray>" + "".join(segments) + "</hp:linesegarray>"
@@ -785,10 +790,10 @@ def header_xml() -> str:
         '<hh:numberings itemCnt="1"><hh:numbering id="1" start="1"/>'
         '</hh:numberings>'
         '<hh:paraProperties itemCnt="1"><hh:paraPr id="0" tabPrIDRef="0" condense="0" '
-        'fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">'
-        '<hh:align horizontal="LEFT" vertical="BASELINE"/>'
+        'fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
+        '<hh:align horizontal="JUSTIFY" vertical="BASELINE"/>'
         '<hh:heading type="NONE" idRef="0" level="0"/>'
-        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="KEEP_WORD" '
+        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" '
         'widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" '
         'lineWrap="BREAK"/>'
         '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
@@ -817,7 +822,8 @@ def fontface(lang: str) -> str:
 
 def char_pr(char_id: str, color: str) -> str:
     return (
-        f'<hh:charPr id="{char_id}" height="1000" textColor="{color}" shadeColor="none" '
+        f'<hh:charPr id="{char_id}" height="{HWPX_FONT_HEIGHT}" '
+        f'textColor="{color}" shadeColor="none" '
         'useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">'
         '<hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
         '<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" '
