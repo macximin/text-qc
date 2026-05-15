@@ -16,22 +16,21 @@ BLUE = "#0000FF"
 BLACK_CHARPR = "0"
 BLUE_CHARPR = "1"
 LINE_CHARS = 230
-HWP_UNIT_PER_MM = 7200 / 25.4
 HWPX_FONT_HEIGHT = 2000
 HWPX_CHARS_PER_LINE = 24
 LINE_HEIGHT = 3200
 LINE_SEG_TEXT_HEIGHT = 2000
 LINE_SEG_BASELINE = 1700
 LINE_SEG_SPACING = 1200
-HWPX_PAGE_WIDTH = round(210.0 * HWP_UNIT_PER_MM)
-HWPX_PAGE_HEIGHT = round(297.0 * HWP_UNIT_PER_MM)
-HWPX_MARGIN_TOP = round(20.0 * HWP_UNIT_PER_MM)
-HWPX_MARGIN_HEADER = round(15.0 * HWP_UNIT_PER_MM)
-HWPX_MARGIN_LEFT = round(30.0 * HWP_UNIT_PER_MM)
-HWPX_MARGIN_RIGHT = round(30.0 * HWP_UNIT_PER_MM)
+HWPX_PAGE_WIDTH = 59528
+HWPX_PAGE_HEIGHT = 84188
+HWPX_MARGIN_TOP = 5668
+HWPX_MARGIN_HEADER = 4252
+HWPX_MARGIN_LEFT = 8504
+HWPX_MARGIN_RIGHT = 8504
 HWPX_MARGIN_GUTTER = 0
-HWPX_MARGIN_FOOTER = round(15.0 * HWP_UNIT_PER_MM)
-HWPX_MARGIN_BOTTOM = round(15.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_FOOTER = 4252
+HWPX_MARGIN_BOTTOM = 4252
 HWPX_TEXT_WIDTH = HWPX_PAGE_WIDTH - HWPX_MARGIN_LEFT - HWPX_MARGIN_RIGHT - HWPX_MARGIN_GUTTER
 
 
@@ -717,14 +716,14 @@ def section_properties_run() -> str:
         f'<hp:run charPrIDRef="{BLACK_CHARPR}">'
         '<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" '
         'tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" '
-        'memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">'
+        'memoShapeIDRef="1" textVerticalWidthHead="0" masterPageCnt="0">'
         '<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/>'
         '<hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>'
         '<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" '
         'border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" '
         'showLineNumber="0"/>'
         '<hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>'
-        f'<hp:pagePr landscape="NARROWLY" width="{HWPX_PAGE_WIDTH}" '
+        f'<hp:pagePr landscape="WIDELY" width="{HWPX_PAGE_WIDTH}" '
         f'height="{HWPX_PAGE_HEIGHT}" gutterType="LEFT_ONLY">'
         f'<hp:margin header="{HWPX_MARGIN_HEADER}" footer="{HWPX_MARGIN_FOOTER}" '
         f'gutter="{HWPX_MARGIN_GUTTER}" left="{HWPX_MARGIN_LEFT}" '
@@ -773,7 +772,7 @@ def header_xml() -> str:
         '<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>'
         '<hh:refList>'
         f'<hh:fontfaces itemCnt="7">{fontfaces}</hh:fontfaces>'
-        '<hh:borderFills itemCnt="1"><hh:borderFill id="1" threeD="0" shadow="0" '
+        '<hh:borderFills itemCnt="2"><hh:borderFill id="1" threeD="0" shadow="0" '
         'centerLine="NONE" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" '
         'isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
         '<hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/>'
@@ -781,7 +780,16 @@ def header_xml() -> str:
         '<hh:topBorder type="NONE" width="0.1 mm" color="#000000"/>'
         '<hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>'
         '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>'
-        '</hh:borderFill></hh:borderFills>'
+        '</hh:borderFill><hh:borderFill id="2" threeD="0" shadow="0" centerLine="NONE" '
+        'breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/>'
+        '<hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+        '<hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/>'
+        '<hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>'
+        '<hh:topBorder type="NONE" width="0.1 mm" color="#000000"/>'
+        '<hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>'
+        '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>'
+        '<hc:fillBrush><hc:winBrush faceColor="none" hatchColor="#FF000000" alpha="0"/>'
+        '</hc:fillBrush></hh:borderFill></hh:borderFills>'
         '<hh:charProperties itemCnt="2">'
         f'{char_pr(BLACK_CHARPR, "#000000")}{char_pr(BLUE_CHARPR, BLUE)}'
         '</hh:charProperties>'
@@ -793,15 +801,20 @@ def header_xml() -> str:
         'fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
         '<hh:align horizontal="JUSTIFY" vertical="BASELINE"/>'
         '<hh:heading type="NONE" idRef="0" level="0"/>'
-        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" '
+        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="KEEP_WORD" '
         'widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" '
         'lineWrap="BREAK"/>'
         '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
+        '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
         '<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
         '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/>'
         '<hc:next value="0" unit="HWPUNIT"/></hh:margin>'
-        '<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/>'
-        '<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" '
+        '<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hp:case><hp:default>'
+        '<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
+        '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/>'
+        '<hc:next value="0" unit="HWPUNIT"/></hh:margin>'
+        '<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hp:default></hp:switch>'
+        '<hh:border borderFillIDRef="2" offsetLeft="0" offsetRight="0" offsetTop="0" '
         'offsetBottom="0" connect="0" ignoreMargin="0"/>'
         '</hh:paraPr></hh:paraProperties>'
         '<hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal" '
@@ -813,7 +826,13 @@ def header_xml() -> str:
 
 def fontface(lang: str) -> str:
     return (
-        f'<hh:fontface lang="{lang}" fontCnt="1"><hh:font id="0" face="함초롬바탕" '
+        f'<hh:fontface lang="{lang}" fontCnt="3"><hh:font id="0" face="바탕" '
+        'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
+        'proportion="0" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
+        'midline="1" xHeight="1"/></hh:font><hh:font id="1" face="함초롬돋움" '
+        'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
+        'proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
+        'midline="1" xHeight="1"/></hh:font><hh:font id="2" face="함초롬바탕" '
         'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
         'proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
         'midline="1" xHeight="1"/></hh:font></hh:fontface>'
@@ -824,8 +843,8 @@ def char_pr(char_id: str, color: str) -> str:
     return (
         f'<hh:charPr id="{char_id}" height="{HWPX_FONT_HEIGHT}" '
         f'textColor="{color}" shadeColor="none" '
-        'useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">'
-        '<hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
+        'useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">'
+        '<hh:fontRef hangul="2" latin="2" hanja="2" japanese="2" other="2" symbol="2" user="2"/>'
         '<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" '
         'symbol="100" user="100"/>'
         '<hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
@@ -835,7 +854,7 @@ def char_pr(char_id: str, color: str) -> str:
         '<hh:underline type="NONE" shape="SOLID" color="#000000"/>'
         '<hh:strikeout shape="NONE" color="#000000"/>'
         '<hh:outline type="NONE"/>'
-        '<hh:shadow type="NONE" color="#B2B2B2" offsetX="10%" offsetY="10%"/>'
+        '<hh:shadow type="NONE" color="#B2B2B2" offsetX="10" offsetY="10"/>'
         '<hh:emboss enabled="0"/>'
         '<hh:engrave enabled="0"/>'
         '<hh:supscript enabled="0"/>'
