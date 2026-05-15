@@ -50,6 +50,8 @@
 - `consistency_correction_loop.md`에 각 iteration의 해결/신규/회귀/잔여 리스크가 남아 있다.
 - 최종 개선 보고서는 Before/After, 개선 근거, 잔여 리스크를 축별로 분리하고, 납품 대상으로 쓰기 전 `validate-report --report`로 별도 검증한다.
 - `edit_class=contextual_typo` 항목은 reading_basis와 앞뒤 문맥 근거를 갖춘다.
+- 문맥형 `ⓐ` 교정은 대체 해석과 그 해석을 버린 이유가 남아 있다.
+- 중복 회차, 정본 선택, 문맥형 오타처럼 논의된 핵심 이슈는 최종 보고서의 `누락 금지 이슈`에 상태가 적혀 있다.
 - 편집자 모드 적용본은 plain text 후보본과 Markdown diff로 확인할 수 있다.
 - 최종 원고 후보 위치가 명확하다.
 - 다음 작업자가 `run_manifest.json`과 이 폴더만 보고 이어받을 수 있다.

@@ -19,6 +19,30 @@ CONTEXTUAL_EDIT_CLASSES = {
     "contextual_grammar",
 }
 CONTEXT_FIELDS = ("context_before", "context_after", "context_window", "evidence_snippet")
+CONTEXT_COUNTER_FIELDS = (
+    "alternative_interpretation",
+    "counter_evidence",
+    "rejected_interpretation",
+    "rejection_basis",
+)
+CONTEXTUAL_SIGNAL_PATTERNS = (
+    "11자",
+    "11자의 틈새",
+    "제품에",
+    "피난 주",
+    "숙식간",
+    "정도록",
+    "책임의무게",
+    "말하지마요",
+    "고았다",
+    "튀어 나왔다",
+)
+AI_SLOP_EDIT_CLASSES = {
+    "ai_slop_cleanup",
+    "repetition_cleanup",
+    "rhythm_cleanup",
+    "abstract_intensifier_cleanup",
+}
 
 
 @dataclass(slots=True)
@@ -190,12 +214,57 @@ def validate_change_item(index: int, item: dict[str, Any]) -> list[dict[str, Any
                     "message": "contextual typo marked ⓐ requires confidence_percent >= 95",
                 }
             )
+        if marker == "ⓐ" and not any(str(item.get(field, "")).strip() for field in CONTEXT_COUNTER_FIELDS):
+            issues.append(
+                {
+                    "index": index,
+                    "field": "alternative_interpretation",
+                    "message": (
+                        "contextual typo marked ⓐ requires alternative_interpretation/"
+                        "counter_evidence/rejected_interpretation/rejection_basis"
+                    ),
+                }
+            )
+    if is_ai_slop_cleanup(item):
+        signal = str(item.get("ai_slop_signal", "")).strip()
+        reason = str(item.get("reason", "")).strip()
+        if not signal and "AI-slop 신호" not in reason and "AI 티" not in reason:
+            issues.append(
+                {
+                    "index": index,
+                    "field": "ai_slop_signal",
+                    "message": "ai_slop cleanup requires an explicit AI-slop signal for human-facing review",
+                }
+            )
     return issues
 
 
 def is_contextual_change(item: dict[str, Any]) -> bool:
     edit_class = str(item.get("edit_class", "")).strip().lower()
-    return bool(item.get("requires_context")) or edit_class in CONTEXTUAL_EDIT_CLASSES
+    return (
+        bool(item.get("requires_context"))
+        or edit_class in CONTEXTUAL_EDIT_CLASSES
+        or has_contextual_signal(item)
+    )
+
+
+def has_contextual_signal(item: dict[str, Any]) -> bool:
+    haystack = "\n".join(
+        str(item.get(field, ""))
+        for field in ("find", "replace", "reason", "location", "context_before", "context_after", "context_window")
+    )
+    if any(pattern in haystack for pattern in CONTEXTUAL_SIGNAL_PATTERNS):
+        return True
+    if "..." in haystack:
+        return True
+    if '"' in str(item.get("find", "")) or "'" in str(item.get("find", "")):
+        return True
+    return False
+
+
+def is_ai_slop_cleanup(item: dict[str, Any]) -> bool:
+    edit_class = str(item.get("edit_class", "")).strip().lower()
+    return edit_class in AI_SLOP_EDIT_CLASSES
 
 
 def write_validation_result(result: CorrectionValidationResult, output_path: Path) -> None:

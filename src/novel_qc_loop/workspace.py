@@ -26,37 +26,46 @@ RUN_SUBDIRS = (
     "exports",
 )
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
+LINE_WS = r"[^\S\r\n]"
+EOL_WS = r"[^\S\n]"
+HEADING_SEP = r"(?:[^\S\r\n]|[.:：_\-])"
 K_NUMBER_CHAPTER_RE = re.compile(
-    r"(?im)^\s*ⓚ\s*(?:제\s*)?(?P<num>\d{1,4})(?:\s*(?:화|회|장|편|챕터))?"
-    r"(?:[\s.:：_\-]+(?P<title>[^\n]*))?\s*$"
+    rf"(?im)^{LINE_WS}*ⓚ{LINE_WS}*(?:제{LINE_WS}*)?(?P<num>\d{{1,4}})"
+    rf"(?:{LINE_WS}*(?:화|회|장|편|챕터))?"
+    rf"(?:{HEADING_SEP}+(?P<title>[^\n]*))?{EOL_WS}*$"
 )
 K_ENGLISH_CHAPTER_RE = re.compile(
-    r"(?im)^\s*ⓚ\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})"
-    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+    rf"(?im)^{LINE_WS}*ⓚ{LINE_WS}*(?:chapter|ep(?:isode)?){LINE_WS}*(?P<num>\d{{1,4}})"
+    rf"{HEADING_SEP}*(?P<title>[^\n]*)$"
 )
 HASH_NUMBER_CHAPTER_RE = re.compile(
-    r"(?im)^\s*#{1,6}\s*(?:제\s*)?(?P<num>\d{1,4})(?:\s*(?:화|회|장|편|챕터))?"
-    r"(?:[\s.:：_\-]+(?P<title>[^\n]*))?\s*$"
+    rf"(?im)^{LINE_WS}*#{{1,6}}{LINE_WS}*(?:제{LINE_WS}*)?(?P<num>\d{{1,4}})"
+    rf"(?:{LINE_WS}*(?:화|회|장|편|챕터))?"
+    rf"(?:{HEADING_SEP}+(?P<title>[^\n]*))?{EOL_WS}*$"
 )
 HASH_ENGLISH_CHAPTER_RE = re.compile(
-    r"(?im)^\s*#{1,6}\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})"
-    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+    rf"(?im)^{LINE_WS}*#{{1,6}}{LINE_WS}*(?:chapter|ep(?:isode)?){LINE_WS}*(?P<num>\d{{1,4}})"
+    rf"{HEADING_SEP}*(?P<title>[^\n]*)$"
 )
 MARKDOWN_HEADER_RE = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
 EPISODE_PREFIX_CHAPTER_RE = re.compile(
-    r"(?im)^\s*(?:chapter|ep(?:isode)?)\s*(?P<num>\d{1,4})[\s.:：_\-]*(?P<title>[^\n]*)$"
+    rf"(?im)^{LINE_WS}*(?:chapter|ep(?:isode)?){LINE_WS}*(?P<num>\d{{1,4}})"
+    rf"{HEADING_SEP}*(?P<title>[^\n]*)$"
 )
 NUMBERED_CHAPTER_RE = re.compile(
-    r"(?im)^\s*(?:제\s*)?(?P<num>\d{1,4})\s*(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
-    r"[\s.:：_\-]*(?P<title>[^\n]*)$"
+    rf"(?im)^{LINE_WS}*(?:제{LINE_WS}*)?(?P<num>\d{{1,4}}){LINE_WS}*"
+    rf"(?:화|회|장|편|챕터|chapter|ep(?:isode)?)"
+    rf"{HEADING_SEP}*(?P<title>[^\n]*)$"
 )
-HASH_PREFIX_RE = re.compile(r"^\s*#{1,6}\s*")
-K_PREFIX_RE = re.compile(r"^\s*ⓚ\s*")
+HASH_PREFIX_RE = re.compile(rf"^{LINE_WS}*#{{1,6}}{LINE_WS}*")
+K_PREFIX_RE = re.compile(rf"^{LINE_WS}*ⓚ{LINE_WS}*")
 NUMBERED_CHAPTER_BODY_RE = re.compile(
-    r"(?im)^(?:제\s*)?\d{1,4}\s*(?:화|회|장|편|챕터)\b.*$"
+    rf"(?im)^(?:제{LINE_WS}*)?\d{{1,4}}{LINE_WS}*(?:화|회|장|편|챕터)\b.*$"
 )
-ENGLISH_CHAPTER_BODY_RE = re.compile(r"(?im)^(?:chapter|ep(?:isode)?)\s*\d{1,4}\b.*$")
-PLAIN_NUMBER_HEADING_BODY_RE = re.compile(r"(?im)^\d{1,4}(?:\s*$|[\s.:：_\-]+.+$)")
+ENGLISH_CHAPTER_BODY_RE = re.compile(rf"(?im)^(?:chapter|ep(?:isode)?){LINE_WS}*\d{{1,4}}\b.*$")
+PLAIN_NUMBER_HEADING_BODY_RE = re.compile(
+    rf"(?im)^\d{{1,4}}(?:{LINE_WS}*$|{HEADING_SEP}+.+$)"
+)
 
 
 def safe_slug(value: str) -> str:
@@ -88,7 +97,11 @@ def decode_text_bytes(data: bytes) -> str:
 
 
 def read_text_auto(path: Path) -> str:
-    return decode_text_bytes(path.read_bytes())
+    return normalize_newlines(decode_text_bytes(path.read_bytes()))
+
+
+def normalize_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -390,11 +403,32 @@ def normalize_chapter_heading_line(line: str) -> str:
     body = HASH_PREFIX_RE.sub("", stripped, count=1).strip() if has_hash_marker else stripped
     if K_PREFIX_RE.match(body):
         body = K_PREFIX_RE.sub("", body, count=1).strip()
-        return f"{indent}ⓚ{body}" if body else line
+        return f"{indent}ⓚ{canonicalize_chapter_heading_body(body)}" if body else line
 
     if is_chapter_heading_body(body, allow_plain_number=has_hash_marker):
-        return f"{indent}ⓚ{body}"
+        return f"{indent}ⓚ{canonicalize_chapter_heading_body(body)}"
     return line
+
+
+def canonicalize_chapter_heading_body(body: str) -> str:
+    text = re.sub(r"[^\S\r\n]+", " ", body.strip())
+    match = re.match(
+        r"^(?P<je>제\s*)?(?P<num>\d{1,4})\s*(?P<unit>화|회|장|편|챕터)(?P<rest>.*)$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return text
+    prefix = "제" if match.group("je") else ""
+    rest = normalize_heading_title_tail(match.group("rest") or "")
+    heading = f"{prefix}{match.group('num')}{match.group('unit')}"
+    return f"{heading} {rest}" if rest else heading
+
+
+def normalize_heading_title_tail(value: str) -> str:
+    text = value.strip()
+    text = re.sub(r"^[.:：_\-]+\s*", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def is_markdown_title_line(line: str) -> bool:

@@ -77,6 +77,7 @@
 - `correction-pass`: `ⓐ`/`ⓐⓐ` 교정안 생성.
 - `editorial-pass`: 적극 편집자 모드. 전역 정합성 3-pass와 화별 수동 딥다이브, 정합성 리포트 이후 replace/delete/insert_before/insert_after 기반 윤문, 중복 삭제, 브리지 추가를 수행. 회차별 공백 제외 4000자 기준을 정본 선택의 강한 원칙으로 보며, HWP/HWPX 대신 text 후보본과 Markdown diff를 사용.
 - `consistency-correction-loop`: 정합성 평가, 교정 batch, 후보본 적용, 정합성 재평가를 만족 기준까지 반복. 해결/신규/회귀/잔여 리스크를 누적해 최종 개선 보고서의 근거로 삼음.
+- `proofread-pass`: 편집자 모드 이후 최종 후보본을 별도로 읽어 오탈자, 띄어쓰기, 문장부호, 송고용 표기, 저위험 문장 다듬기만 처리. 정합성/윤문 루프와 산출물을 분리해 표면 교정 누락을 막음.
 - `export-pass`: PDF/HWPX/HTML 산출과 확인.
 
 ## 자동 evidence 생성

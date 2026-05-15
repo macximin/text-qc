@@ -59,6 +59,27 @@
     "context_before": "직전 문맥 요약 또는 원문 일부",
     "context_after": "직후 문맥 요약 또는 원문 일부",
     "reading_basis": "왜 이 단어가 문맥상 오기인지",
+    "alternative_interpretation": "작가가 의도했을 수 있는 다른 해석",
+    "rejection_basis": "그 해석보다 교정안이 안전한 이유",
     "confidence_percent": 90
+  },
+  {
+    "id": "ctx-typo-0006",
+    "operation": "replace",
+    "severity": "P2",
+    "status": "approved",
+    "marker": "ⓐ",
+    "find": "완벽한 11자의 틈새",
+    "replace": "완벽한 일자형 틈새",
+    "reason": "펜촉 슬릿/모세관 문맥에서는 틈새가 곧고 균일하다는 뜻이 자연스럽습니다.",
+    "location": "ep_0001:fountain_pen_nib",
+    "edit_class": "contextual_typo",
+    "requires_context": true,
+    "context_before": "양쪽으로 벌어진 슬릿이 간격을 좁히는 장면.",
+    "context_after": "이리듐 팁의 수평을 미세 조정하는 장면.",
+    "reading_basis": "수식 대상이 두 갈래 펜촉이 아니라 단수 명사 `틈새`입니다.",
+    "alternative_interpretation": "두 갈래 펜촉이 숫자 11처럼 보인다는 의도 가능성.",
+    "rejection_basis": "`11자의 틈새`는 틈새가 두 줄이라는 뜻으로 읽혀 부자연스럽습니다.",
+    "confidence_percent": 97
   }
 ]

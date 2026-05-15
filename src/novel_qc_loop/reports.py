@@ -19,6 +19,15 @@ INTERNAL_ARTIFACT_RE = re.compile(
     r"\b(?:llm-facing|task_brief|manual_review|run_manifest|schema_version|prompt)\b|프롬프트",
     re.IGNORECASE,
 )
+FINAL_IMPROVEMENT_TITLE_RE = re.compile(r"^#\s+.{0,120}최종\s*개선\s*보고서\s*$", re.MULTILINE)
+FINAL_REPORT_REQUIRED_SECTIONS = (
+    "루프 결과 요약",
+    "개선 요약",
+    "주요 해결 항목",
+    "루프별 개선 이력",
+    "누락 금지 이슈",
+)
+FINAL_REPORT_REQUIRED_BODY_SECTIONS = ("루프별 개선 이력", "누락 금지 이슈")
 
 
 @dataclass(slots=True)
@@ -76,6 +85,8 @@ def validate_human_report(path: Path) -> ReportValidationResult:
                 }
             )
 
+    issues.extend(validate_final_improvement_report_shape(text))
+
     pair_count, pair_issues = validate_claim_evidence_pairs(text)
     issues.extend(pair_issues)
     if pair_count == 0:
@@ -96,6 +107,91 @@ def validate_human_report(path: Path) -> ReportValidationResult:
         hangul_count=korean_stats["hangul_count"],
         issues=issues,
     )
+
+
+def validate_final_improvement_report_shape(text: str) -> list[dict[str, Any]]:
+    if not looks_like_final_improvement_report(text):
+        return []
+    issues: list[dict[str, Any]] = []
+    lines = text.splitlines()
+    section_lines = collect_markdown_section_lines(lines)
+    for section in FINAL_REPORT_REQUIRED_SECTIONS:
+        if section not in section_lines:
+            issues.append(
+                {
+                    "code": "missing_final_report_section",
+                    "line": None,
+                    "message": f"최종 개선 보고서에는 `{section}` 섹션이 필요합니다.",
+                }
+            )
+    for section in FINAL_REPORT_REQUIRED_BODY_SECTIONS:
+        start_line = section_lines.get(section)
+        if start_line is None:
+            continue
+        body = markdown_section_body(lines, start_line)
+        if not section_has_filled_table_row(body):
+            issues.append(
+                {
+                    "code": "empty_final_report_section",
+                    "line": start_line,
+                    "message": f"`{section}` 섹션에는 최소 1개 이상의 실제 항목이 필요합니다.",
+                }
+            )
+    return issues
+
+
+def looks_like_final_improvement_report(text: str) -> bool:
+    if FINAL_IMPROVEMENT_TITLE_RE.search(text):
+        return True
+    return "## 루프 결과 요약" in text and "## 개선 요약" in text
+
+
+def collect_markdown_section_lines(lines: list[str]) -> dict[str, int]:
+    sections: dict[str, int] = {}
+    for index, line in enumerate(lines, start=1):
+        match = re.match(r"^#{1,6}\s+(?P<title>.+?)\s*$", line)
+        if not match:
+            continue
+        title = re.sub(r"`([^`]*)`", r"\1", match.group("title")).strip()
+        sections[title] = index
+    return sections
+
+
+def markdown_section_body(lines: list[str], heading_line_no: int) -> list[str]:
+    start = heading_line_no
+    body: list[str] = []
+    for line in lines[start:]:
+        if re.match(r"^#{1,6}\s+\S", line):
+            break
+        body.append(line)
+    return body
+
+
+def section_has_filled_table_row(lines: list[str]) -> bool:
+    seen_table_header = False
+    seen_separator = False
+    for line in lines:
+        if "|" not in line:
+            continue
+        cells = split_table_row(line)
+        if len(cells) < 2:
+            continue
+        if not seen_table_header:
+            seen_table_header = True
+            continue
+        if is_markdown_separator_row(line):
+            seen_separator = True
+            continue
+        if not seen_separator:
+            continue
+        if any(is_blank_or_placeholder(cell) for cell in cells):
+            continue
+        if all(re.fullmatch(r"[-: ]+", cell) for cell in cells):
+            continue
+        if not any(re.search(r"[가-힣A-Za-z0-9]", cell) for cell in cells):
+            continue
+        return True
+    return False
 
 
 def require_completed_manual_review(

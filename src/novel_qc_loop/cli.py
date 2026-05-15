@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from .reports import (
     write_report_validation_result,
 )
 from .submission import validate_manual_review_submission, write_submission_validation_result
+from .typography import normalize_korean_typography_file
 from .workspace import (
     build_portfolio_status,
     create_run,
@@ -76,6 +78,16 @@ def cmd_start_run(args: argparse.Namespace) -> int:
 
 def cmd_analyze_run(args: argparse.Namespace) -> int:
     result = analyze_run(run_root=Path(args.run_root).resolve())
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_normalize_typography(args: argparse.Namespace) -> int:
+    input_path = Path(args.input).resolve()
+    output_path = Path(args.output).resolve() if args.output else input_path.with_name(
+        input_path.stem + ".typography" + input_path.suffix
+    )
+    result = normalize_korean_typography_file(input_path=input_path, output_path=output_path)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -761,6 +773,14 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--run-root", required=True)
     analyze.set_defaults(func=cmd_analyze_run)
 
+    normalize_typography = subparsers.add_parser(
+        "normalize-typography",
+        help="normalize Korean manuscript typography: “”, ‘’, and …",
+    )
+    normalize_typography.add_argument("--input", required=True)
+    normalize_typography.add_argument("--output")
+    normalize_typography.set_defaults(func=cmd_normalize_typography)
+
     validate_changes = subparsers.add_parser("validate-changes", help="validate correction changes JSON")
     validate_changes.add_argument("--changes", required=True)
     validate_changes.add_argument("--output")
@@ -933,9 +953,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    configure_stdio()
     parser = build_parser()
     args = parser.parse_args()
     return args.func(args)
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from .narrative import classify_bracketed_line
 from .reports import require_completed_manual_review, validate_human_report
 from .submission import validate_manual_review_submission, write_manual_review_scaffold
 from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitle_rows
+from .typography import ASCII_ELLIPSIS_RE, count_style_single_quotes, normalize_straight_quotes
 from .verisimilitude import extract_verisimilitude_candidates
 from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
 
@@ -89,6 +90,62 @@ GENERIC_HYGIENE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("strike_marker", re.compile(r"<s>.*?</s>|~~[^~]+~~")),
     ("correction_marker", re.compile(r"ⓐⓐ?\{[^|{}]*\|[^{}]*\}")),
 )
+SURFACE_PROOFREAD_RULES: tuple[dict[str, Any], ...] = (
+    {
+        "subtype": "surface_typo",
+        "value": "피난 주",
+        "replace": "피난 중",
+        "pattern": re.compile(r"피난\s+주(?=에도|에|에는|를|가|\b)"),
+        "severity": "P3",
+        "review_hint": "문맥상 피난 기간을 뜻하면 `피난 중`으로 교정합니다.",
+        "reading_basis": "`주`는 기간/상태를 받지 못하므로 피난 상태를 뜻하는 `중`의 오기 후보입니다.",
+    },
+    {
+        "subtype": "surface_typo",
+        "value": "숙식간",
+        "replace": "순식간",
+        "pattern": re.compile(r"숙식간"),
+        "severity": "P3",
+        "review_hint": "짧은 시간 변화를 뜻하면 `순식간`으로 교정합니다.",
+        "reading_basis": "눈시울, 표정, 상황 변화와 결합하면 `숙식`이 아니라 시간 부사 `순식간`입니다.",
+    },
+    {
+        "subtype": "surface_typo",
+        "value": "정도록",
+        "replace": "정도로",
+        "pattern": re.compile(r"정도록"),
+        "severity": "P3",
+        "review_hint": "`-할 정도록`은 `-할 정도로`의 오기 후보입니다.",
+        "reading_basis": "정도 명사 뒤 부사격 조사 `로`가 필요한 자리입니다.",
+    },
+    {
+        "subtype": "surface_spacing",
+        "value": "책임의무게",
+        "replace": "책임의 무게",
+        "pattern": re.compile(r"책임의무게"),
+        "severity": "P3",
+        "review_hint": "명사구 `책임의 무게` 띄어쓰기 누락 후보입니다.",
+        "reading_basis": "`책임의`가 뒤 명사 `무게`를 꾸미는 구조입니다.",
+    },
+    {
+        "subtype": "surface_spacing",
+        "value": "말하지마요",
+        "replace": "말하지 마요",
+        "pattern": re.compile(r"말하지마요"),
+        "severity": "P3",
+        "review_hint": "금지 보조 용언 `마요`는 앞말과 띄어 씁니다.",
+        "reading_basis": "`-지 마요` 구성의 보조 용언 띄어쓰기입니다.",
+    },
+    {
+        "subtype": "surface_typo",
+        "value": "고았다",
+        "replace": "고왔다",
+        "pattern": re.compile(r"고았다"),
+        "severity": "P3",
+        "review_hint": "형용사 `곱다`의 활용이면 `고왔다`로 교정합니다.",
+        "reading_basis": "색/모양/결을 묘사하는 형용사 활용 자리라면 `고왔다`가 표준입니다.",
+    },
+)
 
 ABSOLUTE_DATE_RE = re.compile(r"(?P<raw>(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일|\d{4}[./-]\d{1,2}[./-]\d{1,2})")
 RELATIVE_TIME_RE = re.compile(r"(?P<raw>오늘|내일|어제|다음 날|그날 밤|며칠 후|몇 시간 후|잠시 후|한 달 후|이틀 뒤|사흘 뒤|보름 뒤|일 년 후)")
@@ -160,6 +217,7 @@ class AnalysisResult:
     hygiene_flags_path: str
     narrative_allowances_path: str
     ai_slop_path: str
+    contextual_typo_candidates_path: str
     replay_candidates_path: str
     bridge_candidates_path: str
     submission_gate_path: str
@@ -268,6 +326,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     write_json(ai_slop_path, ai_slop_summary)
     refresh_ai_slop_report(run_root, ai_slop_summary)
 
+    contextual_typo_candidates_path = review_dir / "contextual_typo_candidates.jsonl"
+    write_jsonl(contextual_typo_candidates_path, build_contextual_typo_candidates(chapters))
+
     replay_candidates_path = review_dir / "replay_candidates.jsonl"
     write_jsonl(replay_candidates_path, build_replay_candidates(chapters))
 
@@ -288,6 +349,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             narrative_allowances_path=narrative_allowances_path,
             replay_candidates_path=replay_candidates_path,
             bridge_candidates_path=bridge_candidates_path,
+            contextual_typo_candidates_path=contextual_typo_candidates_path,
             chapter_length_flags_path=chapter_length_flags_path,
             subtitle_consistency_flags_path=subtitle_consistency_flags_path,
             era_candidates_path=era_candidates_path,
@@ -325,6 +387,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             "hygiene_flags_path": str(hygiene_flags_path),
             "narrative_allowances_path": str(narrative_allowances_path),
             "ai_slop_path": str(ai_slop_path),
+            "contextual_typo_candidates_path": str(contextual_typo_candidates_path),
             "replay_candidates_path": str(replay_candidates_path),
             "bridge_candidates_path": str(bridge_candidates_path),
             "submission_gate_path": str(submission_gate_path),
@@ -364,6 +427,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         hygiene_flags_path=str(hygiene_flags_path),
         narrative_allowances_path=str(narrative_allowances_path),
         ai_slop_path=str(ai_slop_path),
+        contextual_typo_candidates_path=str(contextual_typo_candidates_path),
         replay_candidates_path=str(replay_candidates_path),
         bridge_candidates_path=str(bridge_candidates_path),
         submission_gate_path=str(submission_gate_path),
@@ -964,6 +1028,208 @@ def build_replay_candidates(chapters: list[dict[str, Any]]) -> list[dict[str, An
     return rows
 
 
+def build_contextual_typo_candidates(chapters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for chapter in chapters:
+        episode = str(chapter["episode"])
+        for line_no, raw_line in enumerate(str(chapter["text"]).splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            for row in contextual_typo_rows_for_line(episode, line_no, line):
+                rows.append(row)
+    return rows
+
+
+def contextual_typo_rows_for_line(episode: str, line_no: int, line: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    rows.extend(surface_proofread_rows_for_line(episode, line_no, line))
+    if re.search(r"제품에\s*(?:끌어안|껴안|안으며|안고)", line):
+        rows.append(
+            contextual_typo_row(
+                subtype="product_vs_chest",
+                episode=episode,
+                line_no=line_no,
+                value="제품에",
+                context=line,
+                severity="P2",
+                review_hint=(
+                    "`제품에`가 물건 명사 product가 아니라 `제 품에/품에`로 읽혀야 하는지 "
+                    "앞뒤 행동을 확인합니다."
+                ),
+                suggested_replace="품에",
+                reading_basis=(
+                    "`끌어안다/껴안다`는 물건을 몸 쪽으로 안는 동작입니다. 주변 문맥이 "
+                    "상품 분류나 제품 설명이 아니라 인물의 신체 행동이면 `품에`가 우선입니다."
+                ),
+                alternative_interpretation="물건을 상품/제품으로 지칭하는 문맥일 가능성.",
+                rejection_basis="행동 동사가 신체 접촉을 요구하므로 `제품에 끌어안다` 결합은 부자연스럽습니다.",
+            )
+        )
+    numeric_gap_match = re.search(r"\b11자(?:의)?\s*틈새", line)
+    if numeric_gap_match:
+        has_nib_context = bool(re.search(r"(?:슬릿|펜촉|모세관|이리듐)", line))
+        rows.append(
+            contextual_typo_row(
+                subtype="numeric_shape_homograph",
+                episode=episode,
+                line_no=line_no,
+                value=numeric_gap_match.group(0),
+                context=line,
+                severity="P2" if has_nib_context else "P3",
+                review_hint=(
+                    "`11자`가 두 갈래 펜촉 형상 의도인지 확인하되, 수식 대상이 `틈새`면 "
+                    "`일자형 틈새`가 더 자연스러운지 판단합니다. 같은 줄에 펜촉 단서가 없으면 "
+                    "앞뒤 문단에서 슬릿/펜촉/모세관 문맥인지 먼저 확인합니다."
+                ),
+                suggested_replace="일자형 틈새",
+                reading_basis=(
+                    "슬릿, 모세관 현상, 이리듐 팁 수평 조정이 함께 나오면 펜촉 중앙의 "
+                    "잉크 통로를 곧게 맞추는 장면입니다."
+                ),
+                alternative_interpretation="두 갈래 펜촉이 숫자 11처럼 나란한 형상을 의도했을 가능성.",
+                rejection_basis=(
+                    "수식 대상이 `펜촉`이 아니라 단수 명사 `틈새`입니다. 틈새는 두 줄이 아니라 "
+                    "중앙의 곧은 슬릿으로 읽는 편이 문맥상 안전합니다."
+                ),
+            )
+        )
+    if "튀어 나왔다" in line:
+        rows.append(
+            contextual_typo_row(
+                subtype="compound_spacing",
+                episode=episode,
+                line_no=line_no,
+                value="튀어 나왔다",
+                context=line,
+                severity="P3",
+                review_hint="보조용언 구성이 아니라 한 단어 `튀어나왔다`인지 확인합니다.",
+                suggested_replace="튀어나왔다",
+                reading_basis="`튀어나오다`는 한 단어 동사로 굳어진 표현입니다.",
+                alternative_interpretation="강조를 위해 띄어 쓴 구어적 리듬일 가능성.",
+                rejection_basis="송고용 표면 교정에서는 사전 표제어 기준 `튀어나오다`를 우선합니다.",
+            )
+        )
+    ellipsis_match = ASCII_ELLIPSIS_RE.search(line)
+    if ellipsis_match:
+        ascii_ellipsis = ellipsis_match.group(0)
+        rows.append(
+            contextual_typo_row(
+                subtype="ascii_ellipsis",
+                episode=episode,
+                line_no=line_no,
+                value=ascii_ellipsis,
+                context=line,
+                severity="P3",
+                review_hint="말줄임표는 `...`가 아니라 `…`를 기본 표준으로 씁니다.",
+                suggested_replace="…" * max(1, round(len(ascii_ellipsis) / 3)),
+                reading_basis="송고용 활자 표준은 세 점 ASCII가 아니라 전각 말줄임표입니다.",
+                alternative_interpretation="원문 파일 변환 과정에서 ASCII 세 점을 의도적으로 썼을 가능성.",
+                rejection_basis="별도 스타일 시트가 없으면 하네스 기본 활자 표준 `…`를 적용합니다.",
+            )
+        )
+    quote_issue = quote_balance_issue(line)
+    if quote_issue:
+        rows.append(
+            contextual_typo_row(
+                subtype="quote_balance",
+                episode=episode,
+                line_no=line_no,
+                value=quote_issue,
+                context=line,
+                severity="P3",
+                review_hint="따옴표는 `\"\"`/`''`가 아니라 `“”`/`‘’`를 기본 표준으로 씁니다.",
+                suggested_replace=normalize_straight_quotes(line),
+                reading_basis="송고용 활자 표준은 곡선 따옴표이며 좌우 균형이 맞아야 합니다.",
+                alternative_interpretation="원문 편집기 또는 OCR 변환 과정에서 직선 따옴표가 섞였을 가능성.",
+                rejection_basis="대화문 범위가 확정되면 직선 따옴표는 작가 의도보다 변환/입력 흔적으로 봅니다.",
+            )
+        )
+    return rows
+
+
+def surface_proofread_rows_for_line(episode: str, line_no: int, line: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for rule in SURFACE_PROOFREAD_RULES:
+        if not rule["pattern"].search(line):
+            continue
+        rows.append(
+            contextual_typo_row(
+                subtype=str(rule["subtype"]),
+                episode=episode,
+                line_no=line_no,
+                value=str(rule["value"]),
+                context=line,
+                severity=str(rule["severity"]),
+                review_hint=str(rule["review_hint"]),
+                suggested_replace=str(rule["replace"]),
+                reading_basis=str(rule["reading_basis"]),
+                alternative_interpretation="작가 의도나 고유한 말투일 가능성.",
+                rejection_basis="표면 교정 루프에서는 주변 문맥이 방어하지 않으면 표준 표기/띄어쓰기를 우선합니다.",
+            )
+        )
+    return rows
+
+
+def contextual_typo_row(
+    *,
+    subtype: str,
+    episode: str,
+    line_no: int,
+    value: str,
+    context: str,
+    severity: str,
+    review_hint: str,
+    suggested_replace: str = "",
+    reading_basis: str = "",
+    alternative_interpretation: str = "",
+    rejection_basis: str = "",
+) -> dict[str, Any]:
+    row = {
+        "kind": "contextual_typo_candidate",
+        "subtype": subtype,
+        "episode": episode,
+        "line": line_no,
+        "value": value,
+        "context": context[:240],
+        "severity": severity,
+        "suggested_edit_class": "contextual_typo",
+        "review_hint": review_hint,
+        "manual_reading_required": True,
+        "confidence_floor_for_a": 95,
+    }
+    if suggested_replace:
+        row["suggested_replace"] = suggested_replace
+    if reading_basis:
+        row["reading_basis"] = reading_basis
+    if alternative_interpretation:
+        row["alternative_interpretation"] = alternative_interpretation
+    if rejection_basis:
+        row["rejection_basis"] = rejection_basis
+    return row
+
+
+def quote_balance_issue(line: str) -> str:
+    ascii_count = line.count('"')
+    ascii_single_count = count_style_single_quotes(line)
+    left_count = line.count("“")
+    right_count = line.count("”")
+    issues = []
+    if ascii_count:
+        issues.append("straight_double_quote_style")
+    if ascii_single_count:
+        issues.append("straight_single_quote_style")
+    if ascii_count % 2 == 1:
+        issues.append("odd_ascii_quote_count")
+    if left_count != right_count:
+        issues.append("curly_quote_imbalance")
+    if line.endswith("“"):
+        issues.append("line_ends_with_open_quote")
+    if "”\"" in line or "\"”" in line:
+        issues.append("mixed_closing_quotes")
+    return ",".join(issues)
+
+
 def build_bridge_candidates(chapters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for prev, curr in zip(chapters, chapters[1:]):
@@ -1032,6 +1298,7 @@ def build_submission_gate(
     narrative_allowances_path: Path,
     replay_candidates_path: Path,
     bridge_candidates_path: Path,
+    contextual_typo_candidates_path: Path,
     chapter_length_flags_path: Path,
     subtitle_consistency_flags_path: Path,
     era_candidates_path: Path,
@@ -1044,6 +1311,7 @@ def build_submission_gate(
     narrative_allowance_count = count_jsonl_rows(narrative_allowances_path)
     replay_count = count_jsonl_rows(replay_candidates_path)
     bridge_count = count_jsonl_rows(bridge_candidates_path)
+    contextual_typo_count = count_jsonl_rows(contextual_typo_candidates_path)
     chapter_length_flag_count = count_jsonl_rows(chapter_length_flags_path)
     subtitle_consistency_flag_count = count_jsonl_rows(subtitle_consistency_flags_path)
     era_count = count_jsonl_rows(era_candidates_path)
@@ -1100,6 +1368,17 @@ def build_submission_gate(
         ),
         "replay_candidate_count": replay_count,
         "bridge_candidate_count": bridge_count,
+        "contextual_typo_candidate_count": contextual_typo_count,
+        "contextual_typo_policy": {
+            "rule": (
+                "패턴 치환만으로 확정하지 않고, 주변 행동/물건/전문용어 문맥을 읽어 "
+                "`ⓐ` 또는 `ⓐⓐ`로 분리합니다."
+            ),
+            "a_marker_gate": (
+                "`ⓐ` 확정 교정은 confidence_percent 95 이상, reading_basis, 문맥 근거, "
+                "대체 해석과 그 해석을 버린 이유가 모두 있어야 합니다."
+            ),
+        },
         "chapter_length_flag_count": chapter_length_flag_count,
         "subtitle_consistency_flag_count": subtitle_consistency_flag_count,
         "subtitle_policy": {
