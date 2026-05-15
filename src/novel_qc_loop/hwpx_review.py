@@ -16,8 +16,19 @@ BLUE = "#0000FF"
 BLACK_CHARPR = "0"
 BLUE_CHARPR = "1"
 LINE_CHARS = 230
-HWPX_CHARS_PER_LINE = 36
+HWP_UNIT_PER_MM = 7200 / 25.4
+HWPX_CHARS_PER_LINE = 42
 LINE_HEIGHT = 1600
+HWPX_PAGE_WIDTH = round(210.0 * HWP_UNIT_PER_MM)
+HWPX_PAGE_HEIGHT = round(297.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_TOP = round(20.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_HEADER = round(15.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_LEFT = round(30.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_RIGHT = round(30.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_GUTTER = 0
+HWPX_MARGIN_FOOTER = round(15.0 * HWP_UNIT_PER_MM)
+HWPX_MARGIN_BOTTOM = round(15.0 * HWP_UNIT_PER_MM)
+HWPX_TEXT_WIDTH = HWPX_PAGE_WIDTH - HWPX_MARGIN_LEFT - HWPX_MARGIN_RIGHT - HWPX_MARGIN_GUTTER
 
 
 @dataclass(slots=True)
@@ -670,7 +681,7 @@ def line_seg_array(vert: int, line_count: int) -> str:
         segments.append(
             f'<hp:lineseg textpos="{textpos}" vertpos="{line_vert}" vertsize="1000" '
             'textheight="1000" baseline="850" spacing="600" horzpos="0" '
-            'horzsize="36000" flags="393216"/>'
+            f'horzsize="{HWPX_TEXT_WIDTH}" flags="393216"/>'
         )
     return "<hp:linesegarray>" + "".join(segments) + "</hp:linesegarray>"
 
@@ -708,9 +719,12 @@ def section_properties_run() -> str:
         'border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" '
         'showLineNumber="0"/>'
         '<hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>'
-        '<hp:pagePr landscape="WIDELY" width="41981" height="29735" gutterType="LEFT_ONLY">'
-        '<hp:margin header="2835" footer="2835" gutter="0" left="2835" right="2835" '
-        'top="2835" bottom="2835"/></hp:pagePr>'
+        f'<hp:pagePr landscape="NARROWLY" width="{HWPX_PAGE_WIDTH}" '
+        f'height="{HWPX_PAGE_HEIGHT}" gutterType="LEFT_ONLY">'
+        f'<hp:margin header="{HWPX_MARGIN_HEADER}" footer="{HWPX_MARGIN_FOOTER}" '
+        f'gutter="{HWPX_MARGIN_GUTTER}" left="{HWPX_MARGIN_LEFT}" '
+        f'right="{HWPX_MARGIN_RIGHT}" top="{HWPX_MARGIN_TOP}" '
+        f'bottom="{HWPX_MARGIN_BOTTOM}"/></hp:pagePr>'
         '<hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" '
         'suffixChar=")" supscript="0"/><hp:noteLine length="-1" type="SOLID" '
         'width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="283" '

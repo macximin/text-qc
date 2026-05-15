@@ -91,4 +91,6 @@ HWPX는 두 용도로만 사용합니다.
 - 루프 중간 검토본: `render-marked-manuscript-hwpx`로 `human-facing/*_marked_manuscript.hwpx`를 생성합니다. 이는 원문형 기호 적용본이며 최종 원고 적용본이 아닙니다.
 - 교정 납품/표시: 필요할 때만 `scripts/apply_blue.py`로 파란색 변경 표시를 적용합니다.
 
+루프 중간 검토본의 기본 편집용지는 A4 세로입니다. 여백은 위쪽 20mm, 머리말 15mm, 왼쪽 30mm, 오른쪽 30mm, 제본 0mm, 꼬리말 15mm, 아래쪽 15mm로 둡니다.
+
 구버전 `.hwp`는 intake에서 `hwp5txt`로 텍스트 추출까지 지원합니다. 다만 직접 XML 조작이나 파란색 변경 표시는 어렵기 때문에 납품용 표시가 필요하면 가능하면 `.hwpx`로 변환한 뒤 처리합니다.
