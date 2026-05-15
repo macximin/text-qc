@@ -41,6 +41,8 @@
 
 편집자 모드에서는 HWP/HWPX 파란줄을 기본 산출물로 쓰지 않습니다. `changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 만들고, 그 diff를 보고 승인/반려합니다.
 
+`edit_class=ai_slop_cleanup`은 사람이 바로 알 수 있게 `reason`과 HWPX 의견에 `AI-slop 신호:`를 직접 표시합니다. 반복 표현, 추상 강도어, 빈 감탄, 균질한 문장 리듬 중 무엇을 줄이는지 밝히고, 단순히 "압축", "덜어냄"으로만 쓰지 않습니다.
+
 ```powershell
 .\scripts\novel-qc-loop.ps1 render-marked-manuscript-hwpx --run-root "workspace\{work}\runs\{run_id}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}"

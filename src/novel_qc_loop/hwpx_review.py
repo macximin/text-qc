@@ -297,10 +297,17 @@ def normalize_review_marker(change: dict[str, Any]) -> str:
 
 
 def aa_opinion_text(change: dict[str, Any], operation: str) -> str:
-    reason = normalize_inline(str(change.get("reason", "")))
+    reason = review_reason_text(change)
     replacement = normalize_inline(str(change.get("replace", "")))
     parts: list[str] = []
-    if operation == "delete":
+    if is_ai_slop_change(change):
+        if operation == "delete":
+            parts.append("의견: AI-slop 신호 삭제 후보")
+        elif operation in {"insert_before", "insert_after"}:
+            parts.append("의견: AI-slop 신호 보강 후보")
+        else:
+            parts.append("의견: AI-slop 신호 완화 윤문 후보")
+    elif operation == "delete":
         parts.append("의견: 삭제 후보")
     elif operation in {"insert_before", "insert_after"}:
         parts.append("의견: 추가 후보")
@@ -315,10 +322,26 @@ def aa_opinion_text(change: dict[str, Any], operation: str) -> str:
 
 def marker_replacement_text(change: dict[str, Any], operation: str) -> str:
     if operation == "delete" and not str(change.get("replace", "")):
-        reason = normalize_inline(str(change.get("reason", "")))
+        reason = review_reason_text(change)
         return f"삭제 의견: {reason}" if reason else "삭제 의견"
     replacement = str(change.get("replace", ""))
     return replacement.strip()
+
+
+def is_ai_slop_change(change: dict[str, Any]) -> bool:
+    edit_class = str(change.get("edit_class", "")).lower().replace("_", "-")
+    return "slop" in edit_class or "ai-ti" in edit_class or "ai티" in edit_class
+
+
+def review_reason_text(change: dict[str, Any]) -> str:
+    reason = normalize_inline(str(change.get("reason", "")))
+    if not is_ai_slop_change(change):
+        return reason
+    if re.search(r"ai[- ]?slop|ai\s*티|ai티", reason, re.IGNORECASE):
+        return reason
+    if not reason:
+        return "AI-slop 신호"
+    return f"AI-slop 신호: {reason}"
 
 
 def build_manual_note_events(source_text: str) -> list[MarkerEvent]:
@@ -490,7 +513,7 @@ def build_review_lines(
             ]
         )
         add("판단할 것: " + decision_prompt(change, operation))
-        add("내 추천/근거: " + str(change.get("reason", "") or "(reason 없음)"))
+        add("내 추천/근거: " + (review_reason_text(change) or "(reason 없음)"))
         reading_basis = str(change.get("reading_basis", "") or "")
         if reading_basis:
             add("읽은 근거: " + reading_basis)
@@ -524,7 +547,7 @@ def decision_prompt(change: dict[str, Any], operation: str) -> str:
     if operation in {"insert_before", "insert_after"}:
         return "추가 문장이 장면 연결, 회차 분량, 감정선을 보강하면서 새 설정을 만들지 않는지 판단."
     if "slop" in edit_class:
-        return "윤문이 원문 톤을 과하게 바꾸지 않고 반복/과장을 줄이는지 판단."
+        return "AI-slop 신호(반복, 추상 강도어, 균질한 문장 리듬)를 줄이되 원문 톤을 과하게 바꾸지 않는지 판단."
     if "bridge" in edit_class:
         return "브리지가 앞뒤 회차의 인과를 자연스럽게 잇는지 판단."
     return "원문 의도 가능성이 남는 적극 편집인지, 승인해도 되는지 판단."
