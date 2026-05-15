@@ -22,6 +22,7 @@ LINE_HEIGHT = 3200
 LINE_SEG_TEXT_HEIGHT = 2000
 LINE_SEG_BASELINE = 1700
 LINE_SEG_SPACING = 1200
+HWPX_RENDERER_OWNS_LAYOUT = True
 HWPX_PAGE_WIDTH = 59528
 HWPX_PAGE_HEIGHT = 84188
 HWPX_MARGIN_TOP = 5668
@@ -655,13 +656,15 @@ def build_section_xml(lines: list[list[ReviewRun]]) -> tuple[str, str]:
             body += "".join(render_run(run) for run in runs)
             preview.append("".join(run.text for run in runs))
         line_count = estimate_line_count(preview[-1])
+        line_segments = "" if HWPX_RENDERER_OWNS_LAYOUT else line_seg_array(vert, line_count)
         paras.append(
             (
                 f'<hp:p id="{index}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" '
-                f'columnBreak="0" merged="0">{body}{line_seg_array(vert, line_count)}</hp:p>'
+                f'columnBreak="0" merged="0">{body}{line_segments}</hp:p>'
             )
         )
-        vert += LINE_HEIGHT * line_count
+        if not HWPX_RENDERER_OWNS_LAYOUT:
+            vert += LINE_HEIGHT * line_count
     return section_root_start() + "".join(paras) + "</hs:sec>", "\n".join(preview)
 
 
