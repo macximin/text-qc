@@ -51,6 +51,8 @@
 
 표식 카운트는 `ⓐ` 교정과 `ⓐⓐ` 판단을 분리합니다. `ⓐ{` 단순 문자열 카운트는 `ⓐⓐ{...}`를 오인할 수 있으므로 금지하고, 렌더 명령의 `marker_counts`와 `rendered_marker_counts`를 기준으로 보고합니다.
 
+동일한 `find`를 여러 occurrence로 나누어 적용하는 경우, `apply-changes-text`는 모든 anchor를 원본 좌표에서 먼저 해석한 뒤 뒤쪽 변경부터 적용합니다. 따라서 occurrence 1을 먼저 치환해 occurrence 2가 사라지는 순차 적용 오류를 피합니다.
+
 적용 뒤에는 다시 정합성 평가를 합니다. 해결된 항목, 새로 생긴 항목, 회귀 항목, 잔여 리스크를 `llm-facing/consistency_correction_loop.md`에 남기고, 만족 기준을 통과한 뒤에만 최종 개선 보고서에서 해결 완료로 씁니다.
 
 ## 문맥형 오타

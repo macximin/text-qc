@@ -217,7 +217,7 @@ def apply_changes_to_text_file(
     source_text = source_path.read_text(encoding="utf-8")
     edited_text = source_text
     issues: list[dict[str, Any]] = []
-    applied_changes: list[dict[str, Any]] = []
+    applications: list[dict[str, Any]] = []
 
     for index, change in enumerate(changes, start=1):
         if not isinstance(change, dict):
@@ -237,12 +237,34 @@ def apply_changes_to_text_file(
             )
             continue
 
-        updated_text, issue = apply_change_to_text(edited_text, change, index=index)
+        application, issue = resolve_change_application(source_text, change, index=index)
         if issue:
             issues.append(issue)
             continue
-        edited_text = updated_text
-        applied_changes.append(change)
+        applications.append(application)
+
+    application_issues = validate_application_spans(applications)
+    issues.extend(application_issues)
+    blocked_indices = {int(issue.get("index") or -1) for issue in application_issues}
+    applyable = [
+        item
+        for item in applications
+        if int(item["index"]) not in blocked_indices
+    ]
+    for application in sorted(
+        applyable,
+        key=lambda item: (int(item["start"]), int(item["end"]), int(item["index"])),
+        reverse=True,
+    ):
+        edited_text = apply_change_span_to_text(
+            edited_text,
+            application["change"],
+            start=int(application["start"]),
+            end=int(application["end"]),
+        )
+    applied_changes = [
+        item["change"] for item in sorted(applyable, key=lambda item: int(item["index"]))
+    ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(edited_text, encoding="utf-8")
@@ -279,51 +301,108 @@ def should_apply_change(change: dict[str, Any], *, accept_aa: bool) -> bool:
     return status in {"approved", "accepted", "done", "승인", "확정", "완료"}
 
 
-def apply_change_to_text(text: str, change: dict[str, Any], *, index: int) -> tuple[str, dict[str, Any] | None]:
+def apply_change_to_text(
+    text: str,
+    change: dict[str, Any],
+    *,
+    index: int,
+) -> tuple[str, dict[str, Any] | None]:
+    application, issue = resolve_change_application(text, change, index=index)
+    if issue:
+        return text, issue
+    return apply_change_span_to_text(
+        text,
+        change,
+        start=int(application["start"]),
+        end=int(application["end"]),
+    ), None
+
+
+def resolve_change_application(
+    text: str,
+    change: dict[str, Any],
+    *,
+    index: int,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     find = str(change["find"])
-    replace = str(change["replace"])
-    operation = infer_operation(change)
     positions = find_occurrences(text, find)
     if not positions:
-        return text, {"index": index, "id": change.get("id", ""), "field": "find", "message": "anchor not found"}
+        return {}, {
+            "index": index,
+            "id": change.get("id", ""),
+            "field": "find",
+            "message": "anchor not found",
+        }
 
     requested_occurrence = change.get("occurrence")
     if requested_occurrence is None and len(positions) > 1:
-        return (
-            text,
-            {
-                "index": index,
-                "id": change.get("id", ""),
-                "field": "find",
-                "message": "anchor is ambiguous; add occurrence or more surrounding context",
-                "matches": len(positions),
-            },
-        )
+        return {}, {
+            "index": index,
+            "id": change.get("id", ""),
+            "field": "find",
+            "message": "anchor is ambiguous; add occurrence or more surrounding context",
+            "matches": len(positions),
+        }
 
     occurrence = int(requested_occurrence or 1)
     if occurrence < 1 or occurrence > len(positions):
-        return (
-            text,
-            {
-                "index": index,
-                "id": change.get("id", ""),
-                "field": "occurrence",
-                "message": "occurrence is outside anchor match count",
-                "matches": len(positions),
-            },
-        )
+        return {}, {
+            "index": index,
+            "id": change.get("id", ""),
+            "field": "occurrence",
+            "message": "occurrence is outside anchor match count",
+            "matches": len(positions),
+        }
 
     start = positions[occurrence - 1]
-    end = start + len(find)
+    return {
+        "index": index,
+        "change": change,
+        "start": start,
+        "end": start + len(find),
+        "operation": infer_operation(change),
+    }, None
+
+
+def validate_application_spans(applications: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    previous: dict[str, Any] | None = None
+    for application in sorted(
+        applications,
+        key=lambda item: (int(item["start"]), int(item["end"])),
+    ):
+        operation = str(application.get("operation") or "")
+        if operation in {"insert_before", "insert_after"}:
+            continue
+        if previous is not None and int(application["start"]) < int(previous["end"]):
+            change = application["change"]
+            previous_change = previous["change"]
+            issues.append(
+                {
+                    "index": application["index"],
+                    "id": change.get("id", ""),
+                    "field": "find",
+                    "message": "change overlaps another selected change",
+                    "overlaps_with": previous_change.get("id", ""),
+                }
+            )
+            continue
+        previous = application
+    return issues
+
+
+def apply_change_span_to_text(text: str, change: dict[str, Any], *, start: int, end: int) -> str:
+    replace = str(change["replace"])
+    operation = infer_operation(change)
     if operation == "replace":
-        return text[:start] + replace + text[end:], None
+        return text[:start] + replace + text[end:]
     if operation == "delete":
-        return text[:start] + text[end:], None
+        return text[:start] + text[end:]
     if operation == "insert_before":
-        return text[:start] + replace + text[start:], None
+        return text[:start] + replace + text[start:]
     if operation == "insert_after":
-        return text[:end] + replace + text[end:], None
-    return text, {"index": index, "id": change.get("id", ""), "field": "operation", "message": "unsupported operation"}
+        return text[:end] + replace + text[end:]
+    return text
 
 
 def find_occurrences(text: str, needle: str) -> list[int]:
