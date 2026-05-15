@@ -801,7 +801,7 @@ def header_xml() -> str:
         'fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
         '<hh:align horizontal="JUSTIFY" vertical="BASELINE"/>'
         '<hh:heading type="NONE" idRef="0" level="0"/>'
-        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="KEEP_WORD" '
+        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" '
         'widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" '
         'lineWrap="BREAK"/>'
         '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
