@@ -5,7 +5,26 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .protocol import PASS_NAMES, REVIEW_AXES
+from .protocol import (
+    BLIND_REVIEWERS,
+    CONSISTENCY_CHECK_UNIT_ID,
+    CONSISTENCY_CHECK_UNIT_SUMMARY,
+    CONSISTENCY_REPETITION_RULE,
+    DEFAULT_CONSISTENCY_UNIT_COUNT,
+    DISPOSITION_VALUES,
+    AUTHOR_INTENT_PROTECTION_RULE,
+    AI_GENERATED_TEXT_CONTINUITY_RULE,
+    CANONICAL_NAME_ALIAS_RULE,
+    EXCLUDED_REVIEW_SCOPES,
+    HARD_CARRYOVER_KINDS,
+    NTH_REPORT_CUMULATIVE_RULE,
+    NTH_REPORT_VISIBLE_PRIORITIES,
+    PASS_NAMES,
+    PREMISE_POLICY_SUMMARY,
+    REPAIRABILITY_VALUES,
+    REVIEW_AXES,
+    TOTAL_CONSISTENCY_REPORT_NAME,
+)
 from .workspace import write_json, write_jsonl
 
 
@@ -33,10 +52,13 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
             rows.append(
                 {
                     "task_id": f"{pass_name}-{axis['axis']}",
+                    "phase": "primary_consistency_review",
+                    "lane": "primary",
                     "pass": pass_name,
                     "axis": axis["axis"],
                     "label": axis["label"],
                     "status": "pending",
+                    "artifact_path": f"llm-facing/consistency_rounds/primary_{pass_name}.md",
                     "required_evidence": (
                         "episode/line/evidence/rationale/counter_evidence/"
                         "story_state_before/story_state_after/story_internal_impact/"
@@ -44,7 +66,107 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
                     ),
                 }
             )
+    for reviewer in BLIND_REVIEWERS:
+        for pass_name in PASS_NAMES:
+            rows.append(
+                {
+                    "task_id": f"{reviewer}-{pass_name}-blind-consistency",
+                    "phase": "blind_consistency_review",
+                    "lane": reviewer,
+                    "pass": pass_name,
+                    "axis": "all_axes",
+                    "label": "블라인드 전 회차 정합성/맥락 장부 + 충돌 후보",
+                    "status": "pending",
+                    "artifact_path": f"llm-facing/blind_reviews/{reviewer}_{pass_name}.md",
+                    "required_evidence": (
+                        "blind reviewer must not read other lanes; include context ledger, "
+                        "conflict candidates, counter_evidence, repairability, disposition"
+                    ),
+                }
+            )
+    rows.append(
+        {
+            "task_id": "total-consistency-report",
+            "phase": "synthesis",
+            "lane": "total",
+            "pass": "synthesis",
+            "axis": "all_axes",
+            "label": "블라인드 결과 통합 total 리포트",
+            "status": "pending",
+            "artifact_path": "llm-facing/total_consistency_report.md",
+            "required_evidence": (
+                "merge primary and blind lanes; separate confirmed, deferred, author decision, "
+                "irreconcilable premise, webnovel allowance, non-reader-facing notes"
+            ),
+        }
+    )
+    for pass_name in PASS_NAMES:
+        rows.append(
+            {
+                "task_id": f"adversarial-{pass_name}",
+                "phase": "adversarial_audit",
+                "lane": "adversarial",
+                "pass": pass_name,
+                "axis": "all_axes",
+                "label": "통합 리포트 이후 적대적 감리",
+                "status": "pending",
+                "artifact_path": "llm-facing/adversarial_audit_3pass.md",
+                "required_evidence": (
+                    "attack total report; downgrade defended items; enforce hard carryover; "
+                    "require counter_evidence search before P0/P1"
+                ),
+            }
+        )
     return rows
+
+
+def empty_pass_result() -> dict[str, Any]:
+    return {"status": "pending", "notes": [], "completed_task_ids": []}
+
+
+def build_pass_map() -> dict[str, dict[str, Any]]:
+    return {pass_name: empty_pass_result() for pass_name in PASS_NAMES}
+
+
+def build_review_protocol() -> dict[str, Any]:
+    return {
+        "consistency_check_unit_id": CONSISTENCY_CHECK_UNIT_ID,
+        "consistency_check_unit_summary": CONSISTENCY_CHECK_UNIT_SUMMARY,
+        "consistency_repetition_rule": CONSISTENCY_REPETITION_RULE,
+        "default_consistency_unit_count": DEFAULT_CONSISTENCY_UNIT_COUNT,
+        "nth_report_visible_priorities": list(NTH_REPORT_VISIBLE_PRIORITIES),
+        "nth_report_cumulative_rule": NTH_REPORT_CUMULATIVE_RULE,
+        "primary_lane": "primary",
+        "primary_passes": list(PASS_NAMES),
+        "blind_reviewers": list(BLIND_REVIEWERS),
+        "blind_passes_per_reviewer": list(PASS_NAMES),
+        "adversarial_passes": list(PASS_NAMES),
+        "premise_policy": PREMISE_POLICY_SUMMARY,
+        "author_intent_protection_rule": AUTHOR_INTENT_PROTECTION_RULE,
+        "ai_generated_text_continuity_rule": AI_GENERATED_TEXT_CONTINUITY_RULE,
+        "canonical_name_alias_rule": CANONICAL_NAME_ALIAS_RULE,
+        "excluded_review_scopes": list(EXCLUDED_REVIEW_SCOPES),
+        "repairability_values": list(REPAIRABILITY_VALUES),
+        "disposition_values": list(DISPOSITION_VALUES),
+        "hard_carryover_kinds": list(HARD_CARRYOVER_KINDS),
+    }
+
+
+def build_consistency_repetition_contract() -> dict[str, Any]:
+    return {
+        "unit_definition": CONSISTENCY_CHECK_UNIT_ID,
+        "requested_unit_count": DEFAULT_CONSISTENCY_UNIT_COUNT,
+        "completed_unit_count": 0,
+        "rule": CONSISTENCY_REPETITION_RULE,
+        "units": [],
+    }
+
+
+def build_blind_reviews() -> dict[str, dict[str, Any]]:
+    return {
+        reviewer: {"status": "pending", "passes": build_pass_map(), "notes": []}
+        for reviewer in BLIND_REVIEWERS
+    }
 
 
 def build_empty_manual_review_submission() -> dict[str, Any]:
@@ -53,15 +175,22 @@ def build_empty_manual_review_submission() -> dict[str, Any]:
         "status": "pending",
         "reviewer": "",
         "reviewed_at": "",
+        "review_protocol": build_review_protocol(),
+        "consistency_repetition_contract": build_consistency_repetition_contract(),
         "checked_axes": [
             {"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""}
             for item in REVIEW_AXES
         ],
-        "passes": {
-            pass_name: {"status": "pending", "notes": [], "completed_task_ids": []}
-            for pass_name in PASS_NAMES
+        "passes": build_pass_map(),
+        "blind_reviews": build_blind_reviews(),
+        "total_consistency_report": {
+            "status": "pending",
+            "path": f"llm-facing/{TOTAL_CONSISTENCY_REPORT_NAME}",
+            "notes": [],
         },
+        "adversarial_passes": build_pass_map(),
         "findings": [],
+        "non_reader_facing_notes": [],
         "remaining_risks": [],
         "final_summary": "",
     }
@@ -84,18 +213,113 @@ def merge_missing_review_axes(submission_path: Path) -> None:
         payload = json.loads(submission_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return
-    checked_axes = payload.get("checked_axes")
-    if not isinstance(checked_axes, list):
-        return
-    seen = {str(item.get("axis") or "") for item in checked_axes if isinstance(item, dict)}
-    changed = False
-    for item in REVIEW_AXES:
-        if item["axis"] in seen:
-            continue
-        checked_axes.append({"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""})
-        changed = True
+    changed = merge_missing_submission_contract(payload)
     if changed:
         write_json(submission_path, payload)
+
+
+def merge_missing_submission_contract(payload: dict[str, Any]) -> bool:
+    changed = False
+    if not isinstance(payload.get("review_protocol"), dict):
+        payload["review_protocol"] = build_review_protocol()
+        changed = True
+    else:
+        protocol = payload["review_protocol"]
+        for key, default in build_review_protocol().items():
+            if key not in protocol:
+                protocol[key] = default
+                changed = True
+    if not isinstance(payload.get("consistency_repetition_contract"), dict):
+        payload["consistency_repetition_contract"] = build_consistency_repetition_contract()
+        changed = True
+    else:
+        contract = payload["consistency_repetition_contract"]
+        for key, default in build_consistency_repetition_contract().items():
+            if key not in contract:
+                contract[key] = default
+                changed = True
+    checked_axes = payload.get("checked_axes")
+    if not isinstance(checked_axes, list):
+        payload["checked_axes"] = [
+            {"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""}
+            for item in REVIEW_AXES
+        ]
+        changed = True
+    else:
+        seen = {str(item.get("axis") or "") for item in checked_axes if isinstance(item, dict)}
+        for item in REVIEW_AXES:
+            if item["axis"] in seen:
+                continue
+            checked_axes.append({"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""})
+            changed = True
+
+    if not isinstance(payload.get("passes"), dict):
+        payload["passes"] = build_pass_map()
+        changed = True
+    else:
+        changed = merge_missing_passes(payload["passes"]) or changed
+
+    if not isinstance(payload.get("blind_reviews"), dict):
+        payload["blind_reviews"] = build_blind_reviews()
+        changed = True
+    else:
+        for reviewer in BLIND_REVIEWERS:
+            review = payload["blind_reviews"].setdefault(reviewer, {"status": "pending", "passes": {}, "notes": []})
+            if not isinstance(review, dict):
+                payload["blind_reviews"][reviewer] = {"status": "pending", "passes": build_pass_map(), "notes": []}
+                changed = True
+                continue
+            if not isinstance(review.get("passes"), dict):
+                review["passes"] = build_pass_map()
+                changed = True
+            else:
+                changed = merge_missing_passes(review["passes"]) or changed
+            if not isinstance(review.get("notes"), list):
+                review["notes"] = []
+                changed = True
+
+    if not isinstance(payload.get("total_consistency_report"), dict):
+        payload["total_consistency_report"] = {"status": "pending", "path": "", "notes": []}
+        changed = True
+    else:
+        report = payload["total_consistency_report"]
+        for key, default in (
+            ("status", "pending"),
+            ("path", f"llm-facing/{TOTAL_CONSISTENCY_REPORT_NAME}"),
+            ("notes", []),
+        ):
+            if key not in report:
+                report[key] = default
+                changed = True
+        if not str(report.get("path") or "").strip():
+            report["path"] = f"llm-facing/{TOTAL_CONSISTENCY_REPORT_NAME}"
+            changed = True
+
+    if not isinstance(payload.get("adversarial_passes"), dict):
+        payload["adversarial_passes"] = build_pass_map()
+        changed = True
+    else:
+        changed = merge_missing_passes(payload["adversarial_passes"]) or changed
+
+    if not isinstance(payload.get("non_reader_facing_notes"), list):
+        payload["non_reader_facing_notes"] = []
+        changed = True
+
+    return changed
+
+
+def merge_missing_passes(pass_map: dict[str, Any]) -> bool:
+    changed = False
+    for pass_name in PASS_NAMES:
+        if not isinstance(pass_map.get(pass_name), dict):
+            pass_map[pass_name] = empty_pass_result()
+            changed = True
+            continue
+        for key, default in (("status", "pending"), ("notes", []), ("completed_task_ids", [])):
+            if key not in pass_map[pass_name]:
+                pass_map[pass_name][key] = default
+                changed = True
+    return changed
 
 
 def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
@@ -130,32 +354,40 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
     for axis in sorted(required_axes - seen_axes):
         issues.append({"field": "checked_axes", "message": f"missing axis: {axis}"})
 
-    passes = payload.get("passes")
-    if not isinstance(passes, dict):
-        passes = {}
-        issues.append({"field": "passes", "message": "must be an object"})
+    is_complete = payload.get("status") == "complete"
 
-    completed_pass_count = 0
-    for pass_name in PASS_NAMES:
-        pass_payload = passes.get(pass_name)
-        if not isinstance(pass_payload, dict):
-            issues.append({"field": f"passes.{pass_name}", "message": "missing pass object"})
-            continue
-        if pass_payload.get("status") == "completed":
-            completed_pass_count += 1
-            notes = pass_payload.get("notes", [])
-            task_ids = pass_payload.get("completed_task_ids", [])
-            if not isinstance(notes, list) or not any(str(note).strip() for note in notes):
-                issues.append({"field": f"passes.{pass_name}.notes", "message": "completed pass requires notes"})
-            if not isinstance(task_ids, list) or not task_ids:
-                issues.append({"field": f"passes.{pass_name}.completed_task_ids", "message": "completed pass requires task ids"})
+    required_pass_count = len(PASS_NAMES) * (2 + len(BLIND_REVIEWERS))
+    completed_pass_count = validate_pass_map_status(
+        payload.get("passes"),
+        "passes",
+        issues,
+        require_present=True,
+        require_complete=is_complete,
+    )
+    completed_pass_count += validate_blind_reviews(payload.get("blind_reviews"), issues, require_complete=is_complete)
+    completed_pass_count += validate_pass_map_status(
+        payload.get("adversarial_passes"),
+        "adversarial_passes",
+        issues,
+        require_present=is_complete,
+        require_complete=is_complete,
+    )
+    total_report_ready = validate_total_consistency_report(
+        payload.get("total_consistency_report"),
+        issues,
+        require_complete=is_complete,
+    )
+    repetition_ready = validate_consistency_repetition_contract(
+        payload.get("consistency_repetition_contract"),
+        issues,
+        require_complete=is_complete,
+    )
 
     findings = payload.get("findings", [])
     if not isinstance(findings, list):
         findings = []
         issues.append({"field": "findings", "message": "must be an array"})
 
-    is_complete = payload.get("status") == "complete"
     for index, finding in enumerate(findings, start=1):
         if not isinstance(finding, dict):
             issues.append({"field": f"findings[{index}]", "message": "must be an object"})
@@ -163,14 +395,29 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         for required in ("priority", "status", "category", "claim", "rationale"):
             if not finding.get(required):
                 issues.append({"field": f"findings[{index}].{required}", "message": "required"})
+        issues.extend(validate_finding_taxonomy_contract(finding, index))
         if is_complete:
             issues.extend(validate_complete_finding_contract(finding, index))
             issues.extend(validate_finding_confidence_contract(finding, index))
 
+    if is_complete and reviewed_axis_count < len(REVIEW_AXES):
+        issues.append({"field": "checked_axes", "message": "complete submission requires all review axes checked"})
+    if is_complete and not total_report_ready:
+        issues.append({"field": "total_consistency_report", "message": "complete submission requires completed total report"})
+    if is_complete and completed_pass_count < required_pass_count:
+        issues.append(
+            {
+                "field": "passes",
+                "message": "complete submission requires primary 3-pass, 3 blind lanes x 3-pass, and adversarial 3-pass",
+            }
+        )
+
     ready = (
         payload.get("status") == "complete"
         and reviewed_axis_count >= len(REVIEW_AXES)
-        and completed_pass_count >= len(PASS_NAMES)
+        and completed_pass_count >= required_pass_count
+        and total_report_ready
+        and repetition_ready
         and bool(str(payload.get("final_summary") or "").strip())
         and not issues
     )
@@ -183,11 +430,224 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         reviewed_axis_count=reviewed_axis_count,
         required_axis_count=len(REVIEW_AXES),
         completed_pass_count=completed_pass_count,
-        required_pass_count=len(PASS_NAMES),
+        required_pass_count=required_pass_count,
         finding_count=len(findings),
         issue_count=len(issues),
         issues=issues,
     )
+
+
+def validate_pass_map_status(
+    pass_map: Any,
+    field_prefix: str,
+    issues: list[dict[str, Any]],
+    *,
+    require_present: bool,
+    require_complete: bool,
+) -> int:
+    if not isinstance(pass_map, dict):
+        if require_present:
+            issues.append({"field": field_prefix, "message": "must be an object"})
+        return 0
+
+    completed_count = 0
+    for pass_name in PASS_NAMES:
+        pass_payload = pass_map.get(pass_name)
+        if not isinstance(pass_payload, dict):
+            if require_present:
+                issues.append({"field": f"{field_prefix}.{pass_name}", "message": "missing pass object"})
+            continue
+        status = pass_payload.get("status")
+        if status == "completed":
+            completed_count += 1
+            notes = pass_payload.get("notes", [])
+            task_ids = pass_payload.get("completed_task_ids", [])
+            if not isinstance(notes, list) or not any(str(note).strip() for note in notes):
+                issues.append({"field": f"{field_prefix}.{pass_name}.notes", "message": "completed pass requires notes"})
+            if not isinstance(task_ids, list) or not task_ids:
+                issues.append(
+                    {
+                        "field": f"{field_prefix}.{pass_name}.completed_task_ids",
+                        "message": "completed pass requires task ids",
+                    }
+                )
+        elif require_complete:
+            issues.append({"field": f"{field_prefix}.{pass_name}.status", "message": "must be completed"})
+    return completed_count
+
+
+def validate_blind_reviews(
+    blind_reviews: Any,
+    issues: list[dict[str, Any]],
+    *,
+    require_complete: bool,
+) -> int:
+    if not isinstance(blind_reviews, dict):
+        if require_complete:
+            issues.append({"field": "blind_reviews", "message": "must be an object"})
+        return 0
+
+    completed_count = 0
+    for reviewer in BLIND_REVIEWERS:
+        review = blind_reviews.get(reviewer)
+        if not isinstance(review, dict):
+            if require_complete:
+                issues.append({"field": f"blind_reviews.{reviewer}", "message": "missing blind reviewer object"})
+            continue
+        if require_complete and review.get("status") != "completed":
+            issues.append({"field": f"blind_reviews.{reviewer}.status", "message": "must be completed"})
+        completed_count += validate_pass_map_status(
+            review.get("passes"),
+            f"blind_reviews.{reviewer}.passes",
+            issues,
+            require_present=require_complete,
+            require_complete=require_complete,
+        )
+    return completed_count
+
+
+def validate_total_consistency_report(
+    report: Any,
+    issues: list[dict[str, Any]],
+    *,
+    require_complete: bool,
+) -> bool:
+    if not isinstance(report, dict):
+        if require_complete:
+            issues.append({"field": "total_consistency_report", "message": "must be an object"})
+        return False
+    ready = report.get("status") == "completed"
+    if require_complete and not ready:
+        issues.append({"field": "total_consistency_report.status", "message": "must be completed"})
+    if report.get("status") == "completed":
+        notes = report.get("notes", [])
+        if not str(report.get("path") or "").strip():
+            issues.append({"field": "total_consistency_report.path", "message": "completed total report requires path"})
+            ready = False
+        if not isinstance(notes, list) or not any(str(note).strip() for note in notes):
+            issues.append({"field": "total_consistency_report.notes", "message": "completed total report requires notes"})
+            ready = False
+    return ready
+
+
+def validate_consistency_repetition_contract(
+    contract: Any,
+    issues: list[dict[str, Any]],
+    *,
+    require_complete: bool,
+) -> bool:
+    if not isinstance(contract, dict):
+        if require_complete:
+            issues.append({"field": "consistency_repetition_contract", "message": "must be an object"})
+        return not require_complete
+
+    requested = contract.get("requested_unit_count", DEFAULT_CONSISTENCY_UNIT_COUNT)
+    completed = contract.get("completed_unit_count", 0)
+    if isinstance(requested, bool) or not isinstance(requested, int) or requested < 1:
+        issues.append(
+            {
+                "field": "consistency_repetition_contract.requested_unit_count",
+                "message": "must be an integer >= 1",
+            }
+        )
+        requested = DEFAULT_CONSISTENCY_UNIT_COUNT
+    if isinstance(completed, bool) or not isinstance(completed, int) or completed < 0:
+        issues.append(
+            {
+                "field": "consistency_repetition_contract.completed_unit_count",
+                "message": "must be an integer >= 0",
+            }
+        )
+        completed = 0
+
+    units = contract.get("units", [])
+    if units is None:
+        units = []
+    if not isinstance(units, list):
+        issues.append({"field": "consistency_repetition_contract.units", "message": "must be an array"})
+        units = []
+
+    completed_units = 0
+    for index, unit in enumerate(units, start=1):
+        if not isinstance(unit, dict):
+            issues.append({"field": f"consistency_repetition_contract.units[{index}]", "message": "must be an object"})
+            continue
+        if unit.get("status") == "completed":
+            completed_units += 1
+            if not str(unit.get("unit_id") or "").strip():
+                issues.append(
+                    {
+                        "field": f"consistency_repetition_contract.units[{index}].unit_id",
+                        "message": "completed unit requires unit_id",
+                    }
+                )
+            if not str(unit.get("total_report_path") or "").strip():
+                issues.append(
+                    {
+                        "field": f"consistency_repetition_contract.units[{index}].total_report_path",
+                        "message": "completed unit requires total_report_path",
+                    }
+                )
+            notes = unit.get("notes", [])
+            if not isinstance(notes, list) or not any(str(note).strip() for note in notes):
+                issues.append(
+                    {
+                        "field": f"consistency_repetition_contract.units[{index}].notes",
+                        "message": "completed unit requires notes",
+                    }
+                )
+
+    effective_completed = max(completed, completed_units)
+    if require_complete and requested > 1 and effective_completed < requested:
+        issues.append(
+            {
+                "field": "consistency_repetition_contract.completed_unit_count",
+                "message": (
+                    "`정합성 검사 N번` means N full consistency_3x3_unit repetitions; "
+                    "completed_unit_count must be >= requested_unit_count"
+                ),
+            }
+        )
+        return False
+    return True
+
+
+def validate_finding_taxonomy_contract(finding: dict[str, Any], index: int) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    repairability = str(finding.get("repairability") or "").strip()
+    disposition = str(finding.get("disposition") or "").strip()
+    final_priority = normalize_priority(finding.get("final_priority") or finding.get("priority"))
+
+    if repairability and repairability not in REPAIRABILITY_VALUES:
+        issues.append(
+            {
+                "field": f"findings[{index}].repairability",
+                "message": f"must be one of: {', '.join(REPAIRABILITY_VALUES)}",
+            }
+        )
+    if disposition and disposition not in DISPOSITION_VALUES:
+        issues.append(
+            {
+                "field": f"findings[{index}].disposition",
+                "message": f"must be one of: {', '.join(DISPOSITION_VALUES)}",
+            }
+        )
+    if final_priority in {"P0", "P1"}:
+        if repairability in {"irreconcilable_premise", "webnovel_allowance"}:
+            issues.append(
+                {
+                    "field": f"findings[{index}].repairability",
+                    "message": "irreconcilable premise or webnovel allowance must not remain P0/P1 local-fix issue",
+                }
+            )
+        if disposition in {"accepted_world_premise", "genre_hyperbole_allowance", "external_fact_soft"}:
+            issues.append(
+                {
+                    "field": f"findings[{index}].disposition",
+                    "message": "accepted premise, genre allowance, or soft external fact must be downgraded/deferred from P0/P1",
+                }
+            )
+    return issues
 
 
 def validate_finding_confidence_contract(finding: dict[str, Any], index: int) -> list[dict[str, Any]]:
@@ -334,6 +794,21 @@ def validate_complete_finding_contract(finding: dict[str, Any], index: int) -> l
                     "message": "external fact findings need clear story-internal impact to remain P0/P1",
                 }
             )
+        if is_hard_carryover_finding(finding, category):
+            if not str(finding.get("story_state_before") or "").strip():
+                issues.append(
+                    {
+                        "field": f"findings[{index}].story_state_before",
+                        "message": "hard carryover P0/P1 requires prior state",
+                    }
+                )
+            if not str(finding.get("story_state_after") or "").strip():
+                issues.append(
+                    {
+                        "field": f"findings[{index}].story_state_after",
+                        "message": "hard carryover P0/P1 requires later conflicting state",
+                    }
+                )
 
     if has_counter and final_priority in {"P0", "P1"}:
         issues.append(
@@ -357,6 +832,40 @@ def validate_complete_finding_contract(finding: dict[str, Any], index: int) -> l
             }
         )
     return issues
+
+
+def is_hard_carryover_finding(finding: dict[str, Any], category: str) -> bool:
+    strictness = str(finding.get("strictness") or "").strip()
+    disposition = str(finding.get("disposition") or "").strip()
+    kind = str(finding.get("kind") or finding.get("fact_kind") or "").strip()
+    category_text = category.lower()
+    if strictness == "hard_carryover" or disposition == "hard_carryover_conflict":
+        return True
+    if kind in HARD_CARRYOVER_KINDS:
+        return True
+    return any(
+        term in category_text
+        for term in (
+            "numeric",
+            "money",
+            "percent",
+            "date",
+            "time",
+            "timeline",
+            "state",
+            "role",
+            "amount",
+            "수치",
+            "숫자",
+            "금액",
+            "퍼센트",
+            "지분",
+            "날짜",
+            "시간",
+            "상태",
+            "직함",
+        )
+    )
 
 
 def normalize_decision(value: Any) -> str:
@@ -405,3 +914,38 @@ def priority_rank(value: str) -> int:
 
 def write_submission_validation_result(result: SubmissionValidationResult, output_path: Path) -> None:
     write_json(output_path, result.to_dict())
+
+
+def workflow_blockers_from_validation(validation: dict[str, Any]) -> list[str]:
+    blockers: set[str] = set()
+    if int(validation.get("reviewed_axis_count") or 0) < int(validation.get("required_axis_count") or 0):
+        blockers.add("manual_review_axes_not_complete")
+    if int(validation.get("completed_pass_count") or 0) < int(validation.get("required_pass_count") or 0):
+        blockers.update(
+            {
+                "primary_consistency_passes_not_complete",
+                "blind_reviews_not_complete",
+                "adversarial_3pass_not_complete",
+            }
+        )
+    if validation.get("status") != "complete" or int(validation.get("completed_pass_count") or 0) < int(
+        validation.get("required_pass_count") or 0
+    ):
+        blockers.add("total_consistency_report_not_complete")
+    for issue in validation.get("issues", []):
+        if not isinstance(issue, dict):
+            continue
+        field = str(issue.get("field") or "")
+        if field.startswith("blind_reviews."):
+            blockers.add("blind_reviews_not_complete")
+        elif field.startswith("total_consistency_report"):
+            blockers.add("total_consistency_report_not_complete")
+        elif field.startswith("adversarial_passes."):
+            blockers.add("adversarial_3pass_not_complete")
+        elif field.startswith("passes"):
+            blockers.add("primary_consistency_passes_not_complete")
+        elif field.startswith("checked_axes"):
+            blockers.add("manual_review_axes_not_complete")
+        elif field.startswith("consistency_repetition_contract"):
+            blockers.add("consistency_repetitions_not_complete")
+    return sorted(blockers)

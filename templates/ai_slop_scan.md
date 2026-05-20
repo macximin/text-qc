@@ -12,6 +12,7 @@ Low / Medium / High 중 선택.
 - AI 작성 추정치: `evidence/review/ai_slop_signals.json`의 `estimated_ai_written_probability_percent`
 - 위험 점수: `score_0_100`
 - 주의: 이 값은 실제 작성 도구를 증명하지 않고, 독자가 AI처럼 느낄 문체 신호를 점수화한다.
+- 주의: 웹소설식 허세, 과장, 장르적 리듬 자체는 결함이 아니다. 반복, 독해 실패, 인물 음성 평준화, 수치/상태 carryover 훼손이 있을 때만 수정 후보로 올린다.
 
 ## 반복 반응
 

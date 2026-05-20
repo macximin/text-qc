@@ -86,6 +86,10 @@ def extract_verisimilitude_candidates(chapters: list[dict[str, Any]]) -> list[di
                         "temporal_anchor": anchor["value"],
                         "action_labels": [label for _, label in actions],
                         "context": line[:260],
+                        "strictness": "hard_carryover",
+                        "disposition_hint": "hard_carryover_conflict",
+                        "allowance_check_required": True,
+                        "repairability_hint": "local_fixable",
                         "priority_hint": "P1 후보는 아님. 뒤에서 상태가 뒤집히는지 수동 감리",
                         "review_hint": (
                             "이미/아직/더 이상/처음/다시 같은 상태 전환어가 있는 줄입니다. "
@@ -140,6 +144,10 @@ def build_conflict_row(first: dict[str, Any], second: dict[str, Any], bucket: st
         "second_polarity": second["polarity"],
         "evidence": [first["context"], second["context"]],
         "confidence": "medium",
+        "strictness": "hard_carryover",
+        "disposition_hint": "hard_carryover_conflict",
+        "allowance_check_required": True,
+        "repairability_hint": "local_fixable",
         "priority_hint": "수동 확인 후 실제 충돌이면 P0/P1 우선 후보",
         "review_hint": (
             "같은 작중 시점/장면 안에서 수행 상태와 미수행 상태가 함께 잡힌 후보입니다. "

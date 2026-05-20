@@ -8,6 +8,34 @@
     "status": { "enum": ["pending", "in_progress", "complete"] },
     "reviewer": { "type": "string" },
     "reviewed_at": { "type": "string" },
+    "review_protocol": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "consistency_repetition_contract": {
+      "type": "object",
+      "properties": {
+        "unit_definition": { "type": "string" },
+        "requested_unit_count": { "type": "integer", "minimum": 1 },
+        "completed_unit_count": { "type": "integer", "minimum": 0 },
+        "rule": { "type": "string" },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "unit_id": { "type": "string" },
+              "status": { "enum": ["pending", "completed", "skipped"] },
+              "total_report_path": { "type": "string" },
+              "adversarial_report_path": { "type": "string" },
+              "notes": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "checked_axes": {
       "type": "array",
       "items": {
@@ -32,9 +60,41 @@
       },
       "additionalProperties": false
     },
+    "blind_reviews": {
+      "type": "object",
+      "properties": {
+        "blind_agent_1": { "$ref": "#/$defs/blind_review" },
+        "blind_agent_2": { "$ref": "#/$defs/blind_review" },
+        "blind_agent_3": { "$ref": "#/$defs/blind_review" }
+      },
+      "additionalProperties": false
+    },
+    "total_consistency_report": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["pending", "completed", "skipped"] },
+        "path": { "type": "string" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "adversarial_passes": {
+      "type": "object",
+      "required": ["pass1", "pass2", "pass3"],
+      "properties": {
+        "pass1": { "$ref": "#/$defs/pass_result" },
+        "pass2": { "$ref": "#/$defs/pass_result" },
+        "pass3": { "$ref": "#/$defs/pass_result" }
+      },
+      "additionalProperties": false
+    },
     "findings": {
       "type": "array",
       "items": { "$ref": "#/$defs/finding" }
+    },
+    "non_reader_facing_notes": {
+      "type": "array",
+      "items": { "type": "string" }
     },
     "remaining_risks": {
       "type": "array",
@@ -110,6 +170,25 @@
       },
       "additionalProperties": false
     },
+    "blind_review": {
+      "type": "object",
+      "required": ["status", "passes", "notes"],
+      "properties": {
+        "status": { "enum": ["pending", "completed", "skipped"] },
+        "passes": {
+          "type": "object",
+          "required": ["pass1", "pass2", "pass3"],
+          "properties": {
+            "pass1": { "$ref": "#/$defs/pass_result" },
+            "pass2": { "$ref": "#/$defs/pass_result" },
+            "pass3": { "$ref": "#/$defs/pass_result" }
+          },
+          "additionalProperties": false
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
     "finding": {
       "type": "object",
       "required": ["priority", "status", "category", "claim", "rationale"],
@@ -120,6 +199,15 @@
         "confidence_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
         "original_priority": { "enum": ["P0", "P1", "P2", "P3"] },
         "final_priority": { "enum": ["P0", "P1", "P2", "P3"] },
+        "repairability": {
+          "enum": ["local_fixable", "structural_fixable", "needs_author_decision", "irreconcilable_premise", "webnovel_allowance"]
+        },
+        "disposition": {
+          "enum": ["editable_conflict", "accepted_world_premise", "genre_hyperbole_allowance", "hard_carryover_conflict", "external_fact_soft", "needs_author_decision"]
+        },
+        "strictness": { "type": "string" },
+        "kind": { "type": "string" },
+        "fact_kind": { "type": "string" },
         "category": { "type": "string" },
         "claim": { "type": "string" },
         "rationale": { "type": "string" },

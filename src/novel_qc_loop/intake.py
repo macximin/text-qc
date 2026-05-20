@@ -14,6 +14,13 @@ from typing import Any
 
 from .internal_paths import PANMU_TEAM_SSOT_NAS_ROOT
 from .package_qc import collect_epub_paths, inspect_epub_packages, natural_path_sort_key, write_epub_package_qc
+from .protocol import (
+    BLIND_REVIEWERS,
+    HARNESS_ADVERSARIAL_AUDIT_NAME,
+    NUMBERED_ONE_PAGE_REPORT_NAME,
+    PASS_NAMES,
+    TOTAL_CONSISTENCY_REPORT_NAME,
+)
 from .submission import write_manual_review_scaffold
 from .workspace import (
     create_run,
@@ -584,15 +591,21 @@ def intake_manuscript(
         "long_lines_200": inspection.long_lines_200,
         "manual_review_queue_path": str(manual_paths["queue_path"]),
         "manual_review_submission_path": str(manual_paths["submission_path"]),
+        "total_consistency_report_path": str(run_root / "llm-facing" / TOTAL_CONSISTENCY_REPORT_NAME),
     }
 
     llm_task_brief_path = run_root / "llm-facing" / "task_brief.md"
-    one_page_report_path = run_root / "human-facing" / "one_page_report.md"
+    one_page_report_path = run_root / "human-facing" / NUMBERED_ONE_PAGE_REPORT_NAME
     checklist_path = run_root / "llm-facing" / "handoff_checklist.md"
     adversarial_brief_path = run_root / "llm-facing" / "adversarial_3pass_brief.md"
+    adversarial_audit_path = run_root / "llm-facing" / "adversarial_audit_3pass.md"
     episode_deep_dive_brief_path = run_root / "llm-facing" / "episode_deep_dive_brief.md"
     episode_deep_dive_path = run_root / "llm-facing" / "episode_deep_dive.md"
     consistency_report_path = run_root / "llm-facing" / "consistency_report.md"
+    consistency_rounds_dir = run_root / "llm-facing" / "consistency_rounds"
+    blind_reviews_dir = run_root / "llm-facing" / "blind_reviews"
+    total_consistency_report_path = run_root / "llm-facing" / TOTAL_CONSISTENCY_REPORT_NAME
+    harness_adversarial_audit_path = run_root / "llm-facing" / HARNESS_ADVERSARIAL_AUDIT_NAME
     editorial_brief_path = run_root / "llm-facing" / "editorial_pass_brief.md"
     contextual_typo_brief_path = run_root / "llm-facing" / "contextual_typo_brief.md"
     correction_plan_path = run_root / "llm-facing" / "correction_plan.md"
@@ -607,9 +620,27 @@ def intake_manuscript(
     _render_file(templates_root / "human_facing_one_page.md", one_page_report_path, values)
     _render_file(templates_root / "llm_handoff_checklist.md", checklist_path, values)
     _render_file(templates_root / "adversarial_3pass_brief.md", adversarial_brief_path, values)
+    _render_file(templates_root / "adversarial_audit_3pass.md", adversarial_audit_path, values)
     _render_file(templates_root / "episode_deep_dive_brief.md", episode_deep_dive_brief_path, values)
     _render_file(templates_root / "episode_deep_dive.empty.md", episode_deep_dive_path, values)
     _render_file(templates_root / "consistency_report.empty.md", consistency_report_path, values)
+    for pass_name in PASS_NAMES:
+        round_values = {**values, "review_lane": "primary", "pass_name": pass_name}
+        _render_file(
+            templates_root / "consistency_context_pass.empty.md",
+            consistency_rounds_dir / f"primary_{pass_name}.md",
+            round_values,
+        )
+    for reviewer in BLIND_REVIEWERS:
+        for pass_name in PASS_NAMES:
+            blind_values = {**values, "review_lane": reviewer, "pass_name": pass_name}
+            _render_file(
+                templates_root / "consistency_context_pass.empty.md",
+                blind_reviews_dir / f"{reviewer}_{pass_name}.md",
+                blind_values,
+            )
+    _render_file(templates_root / "total_consistency_report.empty.md", total_consistency_report_path, values)
+    _render_file(templates_root / "harness_adversarial_audit_3pass.md", harness_adversarial_audit_path, values)
     _render_file(templates_root / "editorial_pass_brief.md", editorial_brief_path, values)
     _render_file(templates_root / "contextual_typo_brief.md", contextual_typo_brief_path, values)
     _render_file(templates_root / "correction_plan.empty.md", correction_plan_path, values)
@@ -638,9 +669,14 @@ def intake_manuscript(
         "one_page_report_path": str(one_page_report_path),
         "llm_task_brief_path": str(llm_task_brief_path),
         "adversarial_brief_path": str(adversarial_brief_path),
+        "adversarial_audit_path": str(adversarial_audit_path),
         "episode_deep_dive_brief_path": str(episode_deep_dive_brief_path),
         "episode_deep_dive_path": str(episode_deep_dive_path),
         "consistency_report_path": str(consistency_report_path),
+        "consistency_rounds_dir": str(consistency_rounds_dir),
+        "blind_reviews_dir": str(blind_reviews_dir),
+        "total_consistency_report_path": str(total_consistency_report_path),
+        "harness_adversarial_audit_path": str(harness_adversarial_audit_path),
         "editorial_brief_path": str(editorial_brief_path),
         "contextual_typo_brief_path": str(contextual_typo_brief_path),
         "correction_plan_path": str(correction_plan_path),

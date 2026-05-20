@@ -81,13 +81,18 @@ workspace/{work_slug}/
       task_brief.md
       handoff_checklist.md
       adversarial_3pass_brief.md
+      consistency_rounds/
+      blind_reviews/
+      total_consistency_report.md
+      adversarial_audit_3pass.md
+      harness_adversarial_audit_3pass.md
       episode_deep_dive_brief.md
       episode_deep_dive.md
       consistency_report.md
       correction_plan.md
       consistency_correction_loop.md
     human-facing/
-      one_page_report.md
+      1차_one_page_report.md
       final_improvement_report.md
     corrections/
       marker_protocol.md
@@ -112,13 +117,13 @@ workspace/{work_slug}/
 - `audit` / `검수`: 검수 중심
 - `correction` / `교정`: 교정 중심
 - `editor` / `편집`: 적극 편집자 모드. 중복 삭제, 문장 윤문, 빠진 브리지 추가, AI 티 완화까지 포함
-- `full` / `전체`: 검수, 적대적 감리, 교정안, human-facing 보고서, 최종 원고 후보까지
+- `full` / `전체`: primary 정합성 3회, blind 3개 lane x 3회, total 정합성 리포트, 적대적 감리, 교정안, human-facing 보고서, 최종 원고 후보까지
 
-편집자 모드는 정합성 우선 편집 게이트를 거칩니다. 전역 정합성 3-pass 이후 `llm-facing/episode_deep_dive.md`와 `llm-facing/consistency_report.md`에 화별 수동 독해와 편집 진입 판정을 남긴 뒤 `corrections/changes.json`을 작성합니다.
+편집자 모드는 정합성 우선 편집 게이트를 거칩니다. primary 정합성 3-pass, blind 3개 lane x 3-pass, `llm-facing/total_consistency_report.md`, 적대적 감리 3-pass 이후 `llm-facing/episode_deep_dive.md`와 `llm-facing/consistency_report.md`에 화별 수동 독해와 편집 진입 판정을 남긴 뒤 `corrections/changes.json`을 작성합니다. 이 묶음 전체가 1개 `consistency_3x3_unit`이며, 사용자가 `정합성 검사 3번`이라고 하면 이 묶음을 세 번 반복합니다.
 
 회차별 공백 제외 글자수는 4000자 이상을 강한 원칙으로 둡니다. `inspection.json`과 `facts/chapter_metrics.jsonl`에는 기준과 회차별 충족 여부가 남고, 미달 회차는 `evidence/review/chapter_length_flags.jsonl`과 `submission_gate.json`에 blocker 후보로 남습니다.
 
-편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다. 중간 확인이 필요하면 `render-marked-manuscript-hwpx`로 원문 순서 그대로 기호가 들어간 HWPX 검토본을 생성합니다.
+편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다. 중간 확인이 필요하면 `render-marked-manuscript-md`로 원문 순서 그대로 기호가 들어간 MD 검수본을 생성합니다. 한글 검토나 납품 요구가 있으면 `render-marked-manuscript-hwpx`도 함께 생성합니다.
 
 정합성 평가와 교정은 반복합니다. `llm-facing/correction_plan.md`에 교정 batch를 만들고, 적용 후 `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀/잔여 리스크를 남깁니다. 최종 개선은 `human-facing/final_improvement_report.md`에 Before/After와 근거 중심으로 정리합니다.
 
@@ -126,7 +131,9 @@ workspace/{work_slug}/
 
 ## Human-facing 보고서
 
-기본 빠른 보고서는 `human-facing/one_page_report.md` 하나입니다. 반복 루프 이후 최종 개선 요약은 `human-facing/final_improvement_report.md`에 둡니다.
+기본 빠른 보고서는 `human-facing/1차_one_page_report.md` 하나입니다. n차 보고서는 `N차_one_page_report.md`로 차수만 올립니다. 반복 루프 이후 최종 개선 요약은 `human-facing/final_improvement_report.md`에 둡니다.
+
+N차 보고서는 누적식입니다. 직전 차수 이후 신규 항목만 쓰지 않고 P0-P3 전체를 계속 보여주며, 각 항목의 최초 차수와 현재 상태를 갱신합니다. 해결, 강등, 철회, 유보, 작가 판단 필요 항목도 삭제하지 않습니다. 특정 등급이 아직 없으면 해당 등급을 생략하지 말고 0건이라고 씁니다.
 
 중간 분석, 긴 체크리스트, 모델에게 넘길 지시는 `llm-facing/`에 둡니다. 작가/편집자에게 바로 보여줄 문서는 기본적으로 1장만 유지합니다.
 
@@ -138,8 +145,8 @@ workspace/{work_slug}/
 - `evidence/facts/character_title_matrix.json`: 인물/직함 drift 후보.
 - `evidence/review/chapter_length_flags.jsonl`: 공백 제외 4000자 미만 회차 후보.
 - `evidence/review/bridge_review_candidates.jsonl`: 앞뒤 화 연결 후보.
-- `evidence/submission/manual_review_queue.jsonl`: 3-pass x 감리 축 작업 큐.
-- `evidence/submission/manual_review_submission.json`: 최종 감리자가 채워 넣는 제출 파일.
+- `evidence/submission/manual_review_queue.jsonl`: primary 3-pass, blind 3개 lane x 3-pass, total report, adversarial 3-pass 작업 큐.
+- `evidence/submission/manual_review_submission.json`: 최종 감리자가 채워 넣는 제출 파일. 완료 상태는 모든 lane과 total/adversarial 단계가 끝나야 통과합니다. `consistency_repetition_contract`에는 요청된 `consistency_3x3_unit` 반복 횟수를 기록합니다.
 
 감리 완료 후에는 아래 명령으로 구조를 확인합니다.
 

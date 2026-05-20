@@ -43,6 +43,16 @@ AI_SLOP_EDIT_CLASSES = {
     "rhythm_cleanup",
     "abstract_intensifier_cleanup",
 }
+REVIEW_MEMO_ONLY_PHRASES = (
+    "판단 필요",
+    "정본 확정 필요",
+    "확정 전 보류",
+    "여부 판단",
+    "판단 여부",
+    "backpatch",
+    "역방향 보정 필요",
+    "독자 반감 위험",
+)
 
 
 @dataclass(slots=True)
@@ -161,6 +171,19 @@ def validate_change_item(index: int, item: dict[str, Any]) -> list[dict[str, Any
         issues.append({"index": index, "field": "replace", "message": "insert operation requires non-empty replace"})
     if operation == "replace" and isinstance(find, str) and isinstance(replace, str) and find == replace:
         issues.append({"index": index, "field": "replace", "message": "replace is identical to find"})
+    if (
+        marker == "ⓐⓐ"
+        and operation in {"replace", "insert_before", "insert_after"}
+        and isinstance(replace, str)
+        and looks_like_review_memo_only(replace)
+    ):
+        issues.append(
+            {
+                "index": index,
+                "field": "replace",
+                "message": "ⓐⓐ replace must be an applyable candidate sentence; put judgment notes in reason",
+            }
+        )
     occurrence = item.get("occurrence")
     if occurrence is not None:
         try:
@@ -267,6 +290,11 @@ def is_ai_slop_cleanup(item: dict[str, Any]) -> bool:
     return edit_class in AI_SLOP_EDIT_CLASSES
 
 
+def looks_like_review_memo_only(text: str) -> bool:
+    normalized = " ".join(text.split())
+    return any(phrase in normalized for phrase in REVIEW_MEMO_ONLY_PHRASES)
+
+
 def write_validation_result(result: CorrectionValidationResult, output_path: Path) -> None:
     write_json(output_path, result.to_dict())
 
@@ -320,11 +348,7 @@ def apply_changes_to_text_file(
         for item in applications
         if int(item["index"]) not in blocked_indices
     ]
-    for application in sorted(
-        applyable,
-        key=lambda item: (int(item["start"]), int(item["end"]), int(item["index"])),
-        reverse=True,
-    ):
+    for application in sorted(applyable, key=application_sort_key, reverse=True):
         edited_text = apply_change_span_to_text(
             edited_text,
             application["change"],
@@ -436,6 +460,7 @@ def resolve_change_application(
 def validate_application_spans(applications: list[dict[str, Any]]) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     previous: dict[str, Any] | None = None
+    non_insert_spans: list[dict[str, Any]] = []
     for application in sorted(
         applications,
         key=lambda item: (int(item["start"]), int(item["end"])),
@@ -457,7 +482,52 @@ def validate_application_spans(applications: list[dict[str, Any]]) -> list[dict[
             )
             continue
         previous = application
+        non_insert_spans.append(application)
+
+    for application in applications:
+        operation = str(application.get("operation") or "")
+        if operation not in {"insert_before", "insert_after"}:
+            continue
+        point = application_position(application)
+        for span in non_insert_spans:
+            if int(span["start"]) < point < int(span["end"]):
+                change = application["change"]
+                span_change = span["change"]
+                issues.append(
+                    {
+                        "index": application["index"],
+                        "id": change.get("id", ""),
+                        "field": "find",
+                        "message": "insertion anchor is inside another selected change",
+                        "overlaps_with": span_change.get("id", ""),
+                    }
+                )
+                break
     return issues
+
+
+def application_sort_key(application: dict[str, Any]) -> tuple[int, int, int]:
+    return (
+        application_position(application),
+        application_apply_priority(application),
+        int(application["index"]),
+    )
+
+
+def application_position(application: dict[str, Any]) -> int:
+    operation = str(application.get("operation") or "")
+    if operation == "insert_after":
+        return int(application["end"])
+    return int(application["start"])
+
+
+def application_apply_priority(application: dict[str, Any]) -> int:
+    operation = str(application.get("operation") or "")
+    if operation == "insert_after":
+        return 2
+    if operation in {"replace", "delete"}:
+        return 1
+    return 0
 
 
 def apply_change_span_to_text(text: str, change: dict[str, Any], *, start: int, end: int) -> str:

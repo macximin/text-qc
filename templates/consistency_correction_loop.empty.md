@@ -11,7 +11,7 @@ Run: `{{run_id}}`
 
 1. 정합성 평가
 2. 교정/편집 batch 작성
-3. 원문형 기호 적용 HWPX 생성
+3. 원문형 기호 적용 MD 검수본 생성
 4. 후보본 적용과 diff 확인
 5. 정합성 재평가
 6. 해결/회귀/신규 문제 분리
@@ -24,7 +24,7 @@ Run: `{{run_id}}`
 - 회차별 공백 제외 {{minimum_chapter_chars_no_space}}자 기준을 통과하거나, 미달 사유가 결락/분할/작가 판단으로 명시됨.
 - 문맥형 오타와 패턴형 오타가 분리되어 있음.
 - `changes.json` 검증, 후보본 적용, diff 검토가 완료됨.
-- 각 교정 batch의 원문형 기호 적용본이 `human-facing/*_marked_manuscript.hwpx`에 생성됨.
+- 각 교정 batch의 원문형 기호 적용본이 `human-facing/*_marked_manuscript.md`에 생성됨. 한글 검토가 필요하면 HWPX도 추가 생성됨.
 - 재평가에서 새 P0/P1 회귀가 없음.
 - 최종 개선 보고서에 before/after 근거를 쓸 수 있음.
 
@@ -52,6 +52,7 @@ Run: `{{run_id}}`
   - 삭제:
   - 추가/브리지:
 - 후보본/diff:
+- 기호 적용 MD 검수본:
 - 기호 적용 HWPX:
 - 재평가 범위:
 - 해결된 항목:

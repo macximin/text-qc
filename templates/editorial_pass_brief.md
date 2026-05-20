@@ -10,11 +10,14 @@ Run: `{{run_id}}`
 
 단, 글 자체를 새로 쓰는 단계는 아닙니다. 플롯, 인물의 결정, POV, 사건 결과, 세계관 사실, 고유명사 설정은 원문과 감리 evidence에 근거가 있을 때만 손댑니다.
 
+웹소설식 허세와 과장 자체는 결함이 아닙니다. 반복 때문에 장면 차이가 사라지거나, 독해가 실패하거나, 숫자/금액/시간/지분/직함/완료 상태 carryover를 흐릴 때만 편집 후보로 올립니다.
+
 ## 정합성 우선 편집 게이트
 
 편집자 모드는 바로 문장을 고치는 단계가 아닙니다. 반드시 아래 산출물을 먼저 읽고, 정합성 판단으로 확정된 항목만 `corrections/changes.json`에 올립니다.
 
 - `llm-facing/adversarial_audit_3pass.md`
+- `llm-facing/total_consistency_report.md`
 - `llm-facing/episode_deep_dive.md`
 - `llm-facing/consistency_report.md`
 - `evidence/submission/manual_review_submission.json`
@@ -43,11 +46,13 @@ Run: `{{run_id}}`
 
 모든 실제 수정 후보는 `corrections/changes.json`에 남깁니다. `find`는 원문에서 실제로 찾을 수 있는 텍스트여야 하며, insertion에서도 위치 앵커로 사용합니다.
 
-편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. 변경안은 plain text에 적용하고, 결과는 `final_manuscript/editorial_candidate.txt`, 검토용 차이는 `corrections/editorial_diff.md`로 봅니다. 다만 중간 확인용으로는 `render-marked-manuscript-hwpx`를 사용해 원문 순서 그대로 기호가 들어간 HWPX를 생성합니다.
+편집자 모드에서는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. 변경안은 plain text에 적용하고, 결과는 `final_manuscript/editorial_candidate.txt`, 검토용 차이는 `corrections/editorial_diff.md`로 봅니다. 중간 확인용으로는 `render-marked-manuscript-md`를 사용해 원문 순서 그대로 기호가 들어간 판단용 MD 검수본을 생성합니다. 한글 검토나 납품 요구가 있으면 `render-marked-manuscript-hwpx`도 함께 생성합니다.
 
 추가 후보의 `find`는 회차 제목/소제목보다 실제 본문 문장을 우선합니다. 회차 헤더 바로 뒤에 브리지를 넣어야 하는 경우에도 다음 본문 문장을 `insert_before` 앵커로 잡아, `ⓐⓐ` 의견이 소제목 줄에 붙지 않게 합니다.
 
 정합성 평가와 교정은 반복합니다. 편집 후보를 적용한 뒤에는 같은 회차와 연결 회차를 다시 읽고, `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀 항목을 분리합니다. 이 루프가 닫히기 전에는 최종 개선 보고서에 “해결됨”이라고 쓰지 않습니다.
+
+윤리선/도덕성 평가는 편집자 모드의 판단 대상이 아닙니다. 재난/사전인지/응징/수익화 장면은 주인공의 도덕성이나 독자 반감을 고치는 방향으로 손대지 않습니다. 정합성 근거 없이 죄책감, 기부, 피해자 지원, 제보, 독자 반감 완화, 최소 완충 같은 도덕/수용성 보강을 제안하지 않고, 정합성, 핍진성, 명시적 인과, 장면 정보 전달에 필요한 문장만 제안합니다.
 
 정합성 루프가 닫힌 뒤에는 별도 표면 교정 루프를 실행합니다. 편집자 모드는 오탈자 전용 단계가 아니므로, 최종 후보본을 다시 읽어 `피난 주 -> 피난 중`, `숙식간 -> 순식간`, `고았다 -> 고왔다`, `-지마요 -> -지 마요`, `거 같다 -> 것 같다` 같은 표면 오류를 `proofread-pass` 산출물로 분리합니다. 허용 표기와 문체 판단이 섞이는 보조 용언은 스타일 시트가 없으면 일괄 치환하지 않습니다.
 
@@ -100,7 +105,7 @@ Run: `{{run_id}}`
 
 ## 마커 기준
 
-- `ⓐ`: 의미와 말투를 거의 건드리지 않는 확정 정리. 명백한 중복 삭제, 문장부호, 조사, 오탈자.
+- `ⓐ`: 의미와 말투를 거의 건드리지 않는 확정 정리. 명백한 중복 삭제, 문장부호, 조사, 오탈자. 단순 맞춤법, 띄어쓰기, 문장 호흡은 `ⓐ` 자동승인으로 보고 판단용 검수본에서 파란 교정문으로 표시합니다.
 - `ⓐⓐ`: 문장 호흡, 말투, 장면 브리지, AI 티 제거, 정보 압축처럼 작가 의도 가능성이 있는 적극 편집.
 
 중복 회차는 별도 기준을 적용합니다. 완전 동일 중복은 `ⓐ(삭제)` 후보로 올릴 수 있지만, 비동일 중복은 먼저 `ⓐⓐ(정본 선택)`으로 판단합니다. 정본 후보는 공백 제외 `{{minimum_chapter_chars_no_space}}`자 이상이어야 하며, 삭제 후 남는 정본이 이 기준을 밑돌면 `ⓐ(삭제)`로 닫지 말고 결락/추가/정본 선택 보류로 남깁니다. 정본이 결정된 뒤 비정본 블록 삭제는 `ⓐ(삭제)` 후보로 처리합니다. 삭제본에만 있는 문장 이식은 자동 병합하지 않고 `ⓐⓐ(이식 후보)`로 분리합니다.
@@ -108,11 +113,12 @@ Run: `{{run_id}}`
 ## 텍스트 적용
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 render-marked-manuscript-md --run-root "{{run_root}}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "{{run_root}}"
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "{{run_root}}" --accept-aa
 ```
 
-기본 적용은 `ⓐ`와 승인된 `ⓐⓐ`만 반영합니다. `--accept-aa`는 편집자 권한으로 `ⓐⓐ`까지 후보본에 반영할 때만 사용합니다.
+기본 적용은 `ⓐ`와 승인된 `ⓐⓐ`만 반영합니다. `--accept-aa`는 편집자 권한으로 `ⓐⓐ`까지 후보본에 반영할 때만 사용합니다. 판단용 `*_marked_manuscript.md`는 원고 적용본이 아니라 사람이 마커를 보며 승인/반려하는 검수본입니다.
 
 ## 금지선
 

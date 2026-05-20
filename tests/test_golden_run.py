@@ -60,6 +60,12 @@ class GoldenRunTests(unittest.TestCase):
             gate = json.loads(Path(result.submission_gate_path).read_text(encoding="utf-8"))
             self.assertEqual(len(candidates), gate["contextual_typo_candidate_count"])
 
+            submission = json.loads(Path(result.manual_review_submission_path).read_text(encoding="utf-8"))
+            self.assertIn("blind_reviews", submission)
+            self.assertIn("total_consistency_report", submission)
+            self.assertIn("adversarial_passes", submission)
+            self.assertIn("non_reader_facing_notes", submission)
+
             manifest = json.loads((run_root / "run_manifest.json").read_text(encoding="utf-8"))
             self.assertIn("contextual_typo_candidates_path", manifest["artifacts"])
             self.assertTrue(Path(manifest["artifacts"]["contextual_typo_candidates_path"]).exists())

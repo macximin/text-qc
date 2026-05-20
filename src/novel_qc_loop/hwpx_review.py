@@ -190,6 +190,108 @@ def render_marked_manuscript_hwpx(
     )
 
 
+def render_marked_manuscript_md(
+    *,
+    source_path: Path,
+    changes_path: Path,
+    output_path: Path,
+    loop_label: str = "",
+    title: str = "",
+    include_manual_notes: bool = True,
+) -> MarkedManuscriptResult:
+    source_text = source_path.read_text(encoding="utf-8")
+    changes = json.loads(changes_path.read_text(encoding="utf-8"))
+    if not isinstance(changes, list):
+        raise ValueError("changes file must be a JSON array")
+
+    issues: list[dict[str, Any]] = []
+    marker_counts: Counter[str] = Counter(
+        normalize_review_marker(change)
+        for change in changes
+        if isinstance(change, dict)
+    )
+    events = build_marker_events(
+        source_text,
+        [change for change in changes if isinstance(change, dict)],
+        issues=issues,
+    )
+    manual_notes = 0
+    if include_manual_notes:
+        manual_events = build_manual_note_events(source_text)
+        manual_notes = len(manual_events)
+        events.extend(manual_events)
+    runs = apply_marker_events(source_text, events, issues=issues)
+
+    heading = title or "기호 적용 검수본"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        marked_runs_to_markdown(
+            runs,
+            title=heading,
+            loop_label=loop_label,
+            source_path=source_path,
+            changes_path=changes_path,
+        ),
+        encoding="utf-8",
+    )
+    rendered_change_events = [
+        event for event in events if not str(event.change_id).endswith("-note")
+    ]
+    rendered_marker_counts: Counter[str] = Counter(
+        event.marker or "(unknown)" for event in rendered_change_events
+    )
+    rendered_changes = len(rendered_change_events)
+    rendered_total_opinions = rendered_marker_counts.get("ⓐⓐ", 0) + manual_notes
+    return MarkedManuscriptResult(
+        source_path=str(source_path),
+        changes_path=str(changes_path),
+        output_path=str(output_path),
+        loop_label=loop_label,
+        total_changes=len(changes),
+        marker_counts=dict(marker_counts),
+        rendered_changes=rendered_changes,
+        rendered_marker_counts=dict(rendered_marker_counts),
+        manual_notes=manual_notes,
+        rendered_total_opinions=rendered_total_opinions,
+        counting_rule=(
+            "count ⓐ corrections and ⓐⓐ opinions separately; never use raw "
+            "text.count('ⓐ{') because it can include ⓐⓐ{"
+        ),
+        issues=issues,
+    )
+
+
+def marked_runs_to_markdown(
+    runs: list[ReviewRun],
+    *,
+    title: str,
+    loop_label: str,
+    source_path: Path,
+    changes_path: Path,
+) -> str:
+    body = "".join(markdown_run(run) for run in runs)
+    header = "\n".join(
+        [
+            f"# {title}",
+            "",
+            f"- Loop: `{loop_label or '(not specified)'}`",
+            f"- Source: `{source_path}`",
+            f"- Changes: `{changes_path}`",
+            "- Purpose: 판단용 검수본. 최종 원고 적용본이 아닙니다.",
+            "- Marker rule: `ⓐ{원문|교정문}`은 자동승인 또는 편집자 확정 후보입니다.",
+            "- Marker rule: `ⓐⓐ{원문|후보문장}[판단: ...]`는 후보문장을 함께 보여 주는 인간 판단 항목입니다.",
+            "",
+            "---",
+            "",
+        ]
+    )
+    return header + body
+
+
+def markdown_run(run: ReviewRun) -> str:
+    return run.text
+
+
 def build_marker_events(
     source_text: str,
     changes: list[dict[str, Any]],
@@ -226,23 +328,24 @@ def build_marker_events(
         marker = normalize_review_marker(change)
         replacement = marker_replacement_text(change, operation)
 
-        if marker == "ⓐⓐ":
-            note_at, note_prefix, note_suffix = aa_note_layout(
-                source_text, change, start, end, operation
+        if operation not in {"replace", "delete", "insert_before", "insert_after"}:
+            issues.append(
+                {"id": change_id, "field": "operation", "message": "unsupported operation"}
             )
-            event = MarkerEvent(
-                start=note_at,
-                end=note_at,
+            continue
+
+        if marker == "ⓐⓐ":
+            event = build_aa_marker_event(
+                source_text=source_text,
+                change=change,
+                operation=operation,
+                start=start,
+                end=end,
                 order=order,
                 change_id=change_id,
                 marker=marker,
-                runs=[
-                    ReviewRun(note_prefix),
-                    ReviewRun(aa_opinion_text(change, operation), BLUE_CHARPR),
-                    ReviewRun(note_suffix),
-                ],
             )
-        if operation in {"replace", "delete"}:
+        elif operation in {"replace", "delete"}:
             if marker != "ⓐⓐ":
                 event = MarkerEvent(
                     start=start,
@@ -257,38 +360,31 @@ def build_marker_events(
                     ],
                 )
         elif operation == "insert_before":
-            if marker != "ⓐⓐ":
-                event = MarkerEvent(
-                    start=start,
-                    end=start,
-                    order=order,
-                    change_id=change_id,
-                    marker=marker,
-                    runs=[
-                        ReviewRun(f"{marker}{{|"),
-                        ReviewRun(replacement, BLUE_CHARPR),
-                        ReviewRun("}"),
-                    ],
-                )
-        elif operation == "insert_after":
-            if marker != "ⓐⓐ":
-                event = MarkerEvent(
-                    start=end,
-                    end=end,
-                    order=order,
-                    change_id=change_id,
-                    marker=marker,
-                    runs=[
-                        ReviewRun(f"{marker}{{|"),
-                        ReviewRun(replacement, BLUE_CHARPR),
-                        ReviewRun("}"),
-                    ],
-                )
-        else:
-            issues.append(
-                {"id": change_id, "field": "operation", "message": "unsupported operation"}
+            event = MarkerEvent(
+                start=start,
+                end=start,
+                order=order,
+                change_id=change_id,
+                marker=marker,
+                runs=[
+                    ReviewRun(f"{marker}{{|"),
+                    ReviewRun(replacement, BLUE_CHARPR),
+                    ReviewRun("}"),
+                ],
             )
-            continue
+        elif operation == "insert_after":
+            event = MarkerEvent(
+                start=end,
+                end=end,
+                order=order,
+                change_id=change_id,
+                marker=marker,
+                runs=[
+                    ReviewRun(f"{marker}{{|"),
+                    ReviewRun(replacement, BLUE_CHARPR),
+                    ReviewRun("}"),
+                ],
+            )
         events.append(event)
         order += 1
     return events
@@ -296,6 +392,40 @@ def build_marker_events(
 
 def normalize_review_marker(change: dict[str, Any]) -> str:
     return str(change.get("marker") or "ⓐⓐ")
+
+
+def build_aa_marker_event(
+    *,
+    source_text: str,
+    change: dict[str, Any],
+    operation: str,
+    start: int,
+    end: int,
+    order: int,
+    change_id: str,
+    marker: str,
+) -> MarkerEvent:
+    if operation in {"replace", "delete"}:
+        return MarkerEvent(
+            start=start,
+            end=end,
+            order=order,
+            change_id=change_id,
+            marker=marker,
+            runs=aa_marker_runs(change, operation, source_text[start:end], "ⓐⓐ", ""),
+        )
+
+    note_at, note_prefix, note_suffix = aa_note_layout(
+        source_text, change, start, end, operation
+    )
+    return MarkerEvent(
+        start=note_at,
+        end=note_at,
+        order=order,
+        change_id=change_id,
+        marker=marker,
+        runs=aa_marker_runs(change, operation, "", note_prefix, note_suffix),
+    )
 
 
 def aa_note_layout(
@@ -324,8 +454,40 @@ def aa_note_layout(
             note_at = line_start_position(source_text, start)
 
     if standalone:
-        return note_at, "ⓐⓐ(", ")\n\n"
-    return note_at, " ⓐⓐ(", ")"
+        return note_at, "ⓐⓐ", "\n\n"
+    return note_at, " ⓐⓐ", ""
+
+
+def aa_marker_runs(
+    change: dict[str, Any],
+    operation: str,
+    original: str,
+    note_prefix: str,
+    note_suffix: str,
+) -> list[ReviewRun]:
+    runs = [
+        ReviewRun(note_prefix),
+        ReviewRun("{"),
+        ReviewRun(original),
+        ReviewRun("|"),
+        ReviewRun(aa_candidate_text(change, operation), BLUE_CHARPR),
+        ReviewRun("}"),
+    ]
+    opinion = aa_opinion_text(change, operation)
+    if opinion:
+        runs.extend([ReviewRun("["), ReviewRun(opinion, BLUE_CHARPR), ReviewRun("]")])
+    if note_suffix:
+        runs.append(ReviewRun(note_suffix))
+    return runs
+
+
+def aa_candidate_text(change: dict[str, Any], operation: str) -> str:
+    replacement = normalize_inline(str(change.get("replace", "")))
+    if operation == "delete":
+        return ""
+    if operation in {"insert_before", "insert_after"}:
+        return replacement
+    return replacement or "수정 후보"
 
 
 def is_chapter_heading_anchor(source_text: str, start: int, end: int) -> bool:
@@ -361,26 +523,23 @@ def after_heading_block_position(source_text: str, start: int, end: int) -> int:
 
 def aa_opinion_text(change: dict[str, Any], operation: str) -> str:
     reason = review_reason_text(change)
-    replacement = normalize_inline(str(change.get("replace", "")))
-    parts: list[str] = []
+    action = "판단 필요"
     if is_ai_slop_change(change):
         if operation == "delete":
-            parts.append("의견: AI-slop 신호 삭제 후보")
+            action = "AI 티 삭제 판단"
         elif operation in {"insert_before", "insert_after"}:
-            parts.append("의견: AI-slop 신호 보강 후보")
+            action = "AI 티 보강 판단"
         else:
-            parts.append("의견: AI-slop 신호 완화 윤문 후보")
+            action = "AI 티 완화 판단"
     elif operation == "delete":
-        parts.append("의견: 삭제 후보")
+        action = "삭제 판단"
     elif operation in {"insert_before", "insert_after"}:
-        parts.append("의견: 추가 후보")
+        action = "추가 판단"
     else:
-        parts.append("의견: 윤문 후보")
+        action = "수정 판단"
     if reason:
-        parts.append(reason)
-    if replacement:
-        parts.append(f"제안: {replacement}")
-    return " / ".join(parts)
+        return f"{action}: {reason}"
+    return action
 
 
 def marker_replacement_text(change: dict[str, Any], operation: str) -> str:
@@ -419,13 +578,13 @@ def build_manual_note_events(source_text: str) -> list[MarkerEvent]:
                 change_id="manual-note",
                 marker="ⓐⓐ",
                 runs=[
-                    ReviewRun("ⓐⓐ("),
+                    ReviewRun("ⓐⓐ{"),
+                    ReviewRun("|"),
                     ReviewRun(
-                        "의견: 11화가 비동일 중복입니다. 11_2를 정본 후보로 보고 "
-                        "기존 11화 삭제 여부를 판단해야 합니다.",
+                        "정본 후보: 11_2",
                         BLUE_CHARPR,
                     ),
-                    ReviewRun(")\n\n"),
+                    ReviewRun("}[판단: 11화가 비동일 중복입니다. 기존 11화 삭제 여부를 판단해야 합니다.]\n\n"),
                 ],
             )
         )
@@ -446,20 +605,22 @@ def build_subtitle_note_events(source_text: str) -> list[MarkerEvent]:
             if position is None:
                 continue
             opinion = (
-                "의견: 소제목이 있는 회차가 소수입니다. 소제목은 무단 수정하지 말고 "
-                "전체 형식 통일을 위해 이 소제목 삭제 후보로 검토하세요. "
+                "판단: 소제목이 있는 회차가 소수입니다. 소제목은 무단 수정하지 말고 "
+                "전체 형식 통일을 위해 이 소제목 삭제 후보를 검토하세요. "
                 f"현황: 있음 {flag.get('present_count')} / 없음 {flag.get('missing_count')}."
             )
+            candidate = "소제목 삭제 후보"
         elif action == "consider_adding_missing_subtitle":
             position = flag.get("marker_end")
             if position is None:
                 continue
             opinion = (
-                "의견: 소제목이 없는 회차가 소수입니다. 소제목은 무단 작성하지 말고 "
+                "판단: 소제목이 없는 회차가 소수입니다. 소제목은 무단 작성하지 말고 "
                 "기존 소제목 톤과 길이에 맞춘 추가 후보로 검토하세요. "
                 f"현황: 있음 {flag.get('present_count')} / 없음 {flag.get('missing_count')}. "
                 f"기존 예시: {example_text}."
             )
+            candidate = f"소제목 추가 후보: {example_text}"
         else:
             continue
         events.append(
@@ -470,9 +631,12 @@ def build_subtitle_note_events(source_text: str) -> list[MarkerEvent]:
                 change_id="subtitle-note",
                 marker="ⓐⓐ",
                 runs=[
-                    ReviewRun(" ⓐⓐ("),
+                    ReviewRun(" ⓐⓐ{"),
+                    ReviewRun("|"),
+                    ReviewRun(candidate, BLUE_CHARPR),
+                    ReviewRun("}["),
                     ReviewRun(opinion, BLUE_CHARPR),
-                    ReviewRun(")"),
+                    ReviewRun("]"),
                 ],
             )
         )
@@ -629,7 +793,8 @@ def approve_effect(change: dict[str, Any], operation: str, context: dict[str, st
 
 
 def marker_preview(change: dict[str, Any], operation: str, context: dict[str, str]) -> str:
-    return f"ⓐⓐ({aa_opinion_text(change, operation)})"
+    original = "" if operation in {"insert_before", "insert_after"} else context.get("target", "")
+    return f"ⓐⓐ{{{original}|{aa_candidate_text(change, operation)}}}[{aa_opinion_text(change, operation)}]"
 
 
 def context_for_change(

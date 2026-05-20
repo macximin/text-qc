@@ -323,6 +323,15 @@ def validate_claim_evidence_tables(lines: list[str]) -> tuple[int, list[dict[str
             if is_blank_or_placeholder(claim) and is_blank_or_placeholder(evidence):
                 idx += 1
                 continue
+            if is_blank_or_placeholder(claim):
+                issues.append(
+                    {
+                        "code": "empty_table_claim",
+                        "line": idx + 1,
+                        "message": "표의 주장/문제 항목은 근거가 있을 때 함께 채워져야 합니다.",
+                        "context": lines[idx].strip()[:240],
+                    }
+                )
             if is_blank_or_placeholder(evidence):
                 issues.append(
                     {
@@ -332,7 +341,7 @@ def validate_claim_evidence_tables(lines: list[str]) -> tuple[int, list[dict[str
                         "context": lines[idx].strip()[:240],
                     }
                 )
-            else:
+            elif not is_blank_or_placeholder(claim):
                 pair_count += 1
             idx += 1
         continue

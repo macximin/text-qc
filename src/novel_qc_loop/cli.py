@@ -13,7 +13,7 @@ from .corrections import (
     validate_changes_file,
     write_validation_result,
 )
-from .hwpx_review import render_marked_manuscript_hwpx
+from .hwpx_review import render_marked_manuscript_hwpx, render_marked_manuscript_md
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
 from .reports import (
@@ -24,7 +24,11 @@ from .reports import (
     validate_human_report,
     write_report_validation_result,
 )
-from .submission import validate_manual_review_submission, write_submission_validation_result
+from .submission import (
+    validate_manual_review_submission,
+    workflow_blockers_from_validation,
+    write_submission_validation_result,
+)
 from .typography import normalize_korean_typography_file
 from .workspace import (
     build_portfolio_status,
@@ -244,6 +248,62 @@ def cmd_render_marked_manuscript_hwpx(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render_marked_manuscript_md(args: argparse.Namespace) -> int:
+    if not args.run_root and not (args.source and args.changes):
+        raise SystemExit("use --run-root or provide both --source and --changes")
+
+    run_root = Path(args.run_root).resolve() if args.run_root else None
+    manifest: dict[str, Any] = {}
+    if run_root:
+        manifest_path = run_root / "run_manifest.json"
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+
+    source_path = (
+        Path(args.source).resolve()
+        if args.source
+        else resolve_review_source_path(run_root, manifest)
+    )
+    changes_path = (
+        Path(args.changes).resolve()
+        if args.changes
+        else run_root / "corrections" / "changes.json"
+    )
+    loop_label = args.loop_label.strip()
+    output_path = (
+        Path(args.output).resolve()
+        if args.output
+        else (
+            run_root
+            / "human-facing"
+            / (f"{loop_label}_marked_manuscript.md" if loop_label else "marked_manuscript.md")
+            if run_root
+            else changes_path.with_name(
+                f"{loop_label}_marked_manuscript.md" if loop_label else "marked_manuscript.md"
+            )
+        )
+    )
+    result = render_marked_manuscript_md(
+        source_path=source_path,
+        changes_path=changes_path,
+        output_path=output_path,
+        loop_label=loop_label,
+        title=args.title,
+        include_manual_notes=not args.no_manual_notes,
+    )
+    if run_root:
+        manifest.setdefault("artifacts", {})
+        key = (
+            f"{loop_label}_marked_manuscript_md_path"
+            if loop_label
+            else "marked_manuscript_md_path"
+        )
+        manifest["artifacts"][key] = str(output_path)
+        write_json(run_root / "run_manifest.json", manifest)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def resolve_review_source_path(run_root: Path, manifest: dict[str, Any]) -> Path:
     for value in (
         manifest.get("source_text_path"),
@@ -258,6 +318,35 @@ def resolve_review_source_path(run_root: Path, manifest: dict[str, Any]) -> Path
         if path.exists():
             return path
     return run_root / "final_manuscript" / "final_manuscript.txt"
+
+
+def resolve_one_page_report_path(run_root: Path) -> Path:
+    manifest_path = run_root / "run_manifest.json"
+    if manifest_path.exists():
+        manifest = read_json(manifest_path)
+        report_value = manifest.get("artifacts", {}).get("one_page_report_path")
+        if report_value:
+            report_path = Path(str(report_value))
+            if not report_path.is_absolute():
+                report_path = (run_root / report_path).resolve()
+            if report_path.exists():
+                return report_path
+
+    human_dir = run_root / "human-facing"
+    if human_dir.exists():
+        numbered_reports = [
+            item
+            for item in human_dir.iterdir()
+            if item.is_file() and item.name.endswith("_one_page_report.md")
+        ]
+        if numbered_reports:
+            return sorted(numbered_reports, key=numbered_report_sort_key)[-1]
+    return human_dir / "one_page_report.md"
+
+
+def numbered_report_sort_key(path: Path) -> tuple[int, str]:
+    prefix = path.name.split("차_", 1)[0]
+    return (int(prefix) if prefix.isdecimal() else -1, path.name)
 
 
 def cmd_validate_submission(args: argparse.Namespace) -> int:
@@ -289,7 +378,7 @@ def cmd_validate_report(args: argparse.Namespace) -> int:
         raise SystemExit("one of --run-root or --report is required")
     if args.run_root:
         run_root = Path(args.run_root).resolve()
-        report_path = run_root / "human-facing" / "one_page_report.md"
+        report_path = resolve_one_page_report_path(run_root)
         default_output = run_root / "human-facing" / "report_validation.json"
     else:
         run_root = None
@@ -459,13 +548,19 @@ def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
             "manual_review_submission_invalid_json",
             "human_report_not_claim_evidence_ready",
             "human_report_missing",
+            "primary_consistency_passes_not_complete",
+            "blind_reviews_not_complete",
+            "total_consistency_report_not_complete",
+            "adversarial_3pass_not_complete",
+            "manual_review_axes_not_complete",
         }
     ]
     if not gate_exists:
         blockers.append("evidence_not_generated")
     if not validation.get("ready_for_submission"):
         blockers.append("manual_review_not_complete")
-    report_path = run_root / "human-facing" / "one_page_report.md"
+    blockers.extend(workflow_blockers_from_validation(validation))
+    report_path = resolve_one_page_report_path(run_root)
     if report_path.exists():
         report_validation = require_completed_manual_review(
             validate_human_report(report_path),
@@ -494,7 +589,16 @@ def refresh_submission_gate_report(
     blockers = [
         item
         for item in blockers
-        if item not in {"human_report_not_claim_evidence_ready", "human_report_missing"}
+        if item
+        not in {
+            "human_report_not_claim_evidence_ready",
+            "human_report_missing",
+            "primary_consistency_passes_not_complete",
+            "blind_reviews_not_complete",
+            "total_consistency_report_not_complete",
+            "adversarial_3pass_not_complete",
+            "manual_review_axes_not_complete",
+        }
     ]
     if not gate_exists:
         blockers.append("evidence_not_generated")
@@ -508,6 +612,8 @@ def refresh_submission_gate_report(
         blockers = [item for item in blockers if item != "manual_review_not_complete"]
         if not manual_validation.get("ready_for_submission"):
             blockers.append("manual_review_not_complete")
+        blockers.extend(workflow_blockers_from_validation(manual_validation))
+        blockers.extend(workflow_blockers_from_validation(manual_validation))
     else:
         blockers.append("manual_review_not_complete")
     gate["human_report"] = validation
@@ -548,6 +654,7 @@ def refresh_submission_gate_reaudit(
         blockers = [item for item in blockers if item != "manual_review_not_complete"]
         if not manual_validation.get("ready_for_submission"):
             blockers.append("manual_review_not_complete")
+        blockers.extend(workflow_blockers_from_validation(manual_validation))
     gate["blockers"] = sorted(set(blockers))
     gate["ready_for_submission"] = not gate["blockers"]
     gate["status"] = "ready" if gate["ready_for_submission"] else "blocked"
@@ -826,6 +933,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip generated opinion notes",
     )
     marked_hwpx.set_defaults(func=cmd_render_marked_manuscript_hwpx)
+
+    marked_md = subparsers.add_parser(
+        "render-marked-manuscript-md",
+        help="render the full source manuscript with visible ⓐ/ⓐⓐ markers inserted in Markdown",
+    )
+    marked_md.add_argument("--run-root", help="run folder; defaults paths from run_manifest and corrections/")
+    marked_md.add_argument("--source", help="source text path; default: run manifest source/extracted text")
+    marked_md.add_argument("--changes", help="changes JSON path; default: RUN/corrections/changes.json")
+    marked_md.add_argument("--output", help="Markdown output path; default: RUN/human-facing/*_marked_manuscript.md")
+    marked_md.add_argument("--loop-label", default="", help="label used in output name, e.g. loop_01")
+    marked_md.add_argument("--title", default="", help="document title")
+    marked_md.add_argument(
+        "--no-manual-notes",
+        action="store_true",
+        help="skip generated opinion notes",
+    )
+    marked_md.set_defaults(func=cmd_render_marked_manuscript_md)
 
     validate_submission = subparsers.add_parser("validate-submission", help="validate manual review submission JSON")
     validate_submission.add_argument("--submission")

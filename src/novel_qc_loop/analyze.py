@@ -10,8 +10,9 @@ from typing import Any
 
 from .models import MIN_CHAPTER_CHARS_NO_SPACE
 from .narrative import classify_bracketed_line
+from .protocol import HARD_CARRYOVER_KINDS, NUMBERED_ONE_PAGE_REPORT_NAME, PREMISE_POLICY_SUMMARY
 from .reports import require_completed_manual_review, validate_human_report
-from .submission import validate_manual_review_submission, write_manual_review_scaffold
+from .submission import validate_manual_review_submission, workflow_blockers_from_validation, write_manual_review_scaffold
 from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitle_rows
 from .typography import ASCII_ELLIPSIS_RE, count_style_single_quotes, normalize_straight_quotes
 from .verisimilitude import extract_verisimilitude_candidates
@@ -354,7 +355,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             subtitle_consistency_flags_path=subtitle_consistency_flags_path,
             era_candidates_path=era_candidates_path,
             ai_slop_path=ai_slop_path,
-            human_report_path=run_root / "human-facing" / "one_page_report.md",
+            human_report_path=resolve_human_report_path(run_root, manifest),
             manual_review_submission_path=manual_review_submission_path,
         ),
     )
@@ -449,6 +450,32 @@ def resolve_source_text_path(run_root: Path, raw_path: str) -> Path:
         if candidate.exists():
             return candidate.resolve()
     return candidates[0]
+
+
+def resolve_human_report_path(run_root: Path, manifest: dict[str, Any]) -> Path:
+    report_value = manifest.get("artifacts", {}).get("one_page_report_path")
+    if report_value:
+        report_path = Path(str(report_value))
+        if not report_path.is_absolute():
+            report_path = (run_root / report_path).resolve()
+        if report_path.exists():
+            return report_path
+
+    human_dir = run_root / "human-facing"
+    if human_dir.exists():
+        numbered = [
+            item
+            for item in human_dir.iterdir()
+            if item.is_file() and item.name.endswith("_one_page_report.md")
+        ]
+        if numbered:
+            return sorted(numbered, key=numbered_report_sort_key)[-1]
+    return human_dir / NUMBERED_ONE_PAGE_REPORT_NAME
+
+
+def numbered_report_sort_key(path: Path) -> tuple[int, str]:
+    prefix = path.name.split("차_", 1)[0]
+    return (int(prefix) if prefix.isdecimal() else -1, path.name)
 
 
 def split_chapters(text: str) -> list[dict[str, Any]]:
@@ -548,15 +575,54 @@ def extract_regex_rows(chapters: list[dict[str, Any]], pattern: re.Pattern[str],
         for line_no, line in enumerate(lines, start=1):
             for match in pattern.finditer(line):
                 rows.append(
-                    {
-                        "kind": kind,
-                        "episode": chapter["episode"],
-                        "line": line_no,
-                        "value": match.group("raw"),
-                        "context": line.strip()[:240],
-                    }
+                    enrich_fact_row(
+                        {
+                            "kind": kind,
+                            "episode": chapter["episode"],
+                            "line": line_no,
+                            "value": match.group("raw"),
+                            "context": line.strip()[:240],
+                        }
+                    )
                 )
     return rows
+
+
+def enrich_fact_row(row: dict[str, Any]) -> dict[str, Any]:
+    kind = str(row.get("kind") or "")
+    if kind in HARD_CARRYOVER_KINDS:
+        if kind in {"money", "percent"}:
+            axis = "numeric_carryover"
+            review_hint = "금액/지분/퍼센트는 이후 회차에서 같은 수치가 어떻게 carryover되는지 직접 확인합니다."
+        elif kind in {"title_or_role", "kin_title"}:
+            axis = "title_role_drift"
+            review_hint = "직함/호칭은 실제 승진, 관계 변화, 위장 호칭인지 drift인지 앞뒤 장면으로 확인합니다."
+        else:
+            axis = "timeline_continuity"
+            review_hint = "날짜/시간 표현은 사건 순서와 완료/미완료 상태를 흔드는지 직접 확인합니다."
+        row.update(
+            {
+                "axis": axis,
+                "strictness": "hard_carryover",
+                "disposition_hint": "hard_carryover_conflict",
+                "manual_reading_required": True,
+                "review_hint": review_hint,
+            }
+        )
+    elif kind == "era_or_modern_tone_candidate":
+        row.update(
+            {
+                "axis": "era_validation",
+                "strictness": "soft_external_fact",
+                "disposition_hint": "external_fact_soft",
+                "manual_reading_required": True,
+                "review_hint": (
+                    "시대 불가능 후보는 세계관 안에서 제도/기술이 세워졌는지 먼저 확인합니다. "
+                    "작중 전제로 방어되면 현실 고증 오류가 아니라 이후 자기모순 감시 대상으로 둡니다."
+                ),
+            }
+        )
+    return row
 
 
 def build_timeline_summary(
@@ -952,7 +1018,9 @@ def recommend_ai_slop_action(score: int) -> str:
 
 
 def refresh_ai_slop_report(run_root: Path, summary: dict[str, Any]) -> None:
-    report_path = run_root / "human-facing" / "one_page_report.md"
+    manifest_path = run_root / "run_manifest.json"
+    manifest = read_json(manifest_path) if manifest_path.exists() else {}
+    report_path = resolve_human_report_path(run_root, manifest)
     if not report_path.exists():
         return
     start = "<!-- AUTO:AI_SLOP_START -->"
@@ -1331,6 +1399,7 @@ def build_submission_gate(
             validation = validate_manual_review_submission(manual_review_submission_path)
             manual_review = validation.to_dict()
             manual_ready = validation.ready_for_submission
+            blockers.extend(workflow_blockers_from_validation(manual_review))
         except json.JSONDecodeError:
             blockers.append("manual_review_submission_invalid_json")
     if not manual_ready:
@@ -1352,8 +1421,15 @@ def build_submission_gate(
         "priority_policy": {
             "primary_axis": "verisimilitude_continuity",
             "summary": "작중 행동/상태/인과 연속성을 외부 고증 후보보다 우선합니다.",
+            "premise_policy": PREMISE_POLICY_SUMMARY,
             "external_fact_rule": (
                 "날짜/요일/영업일 같은 외부 고증은 작중 상태 충돌이나 독자 이해 붕괴를 만들 때만 P0/P1 후보입니다."
+            ),
+            "webnovel_allowance_rule": (
+                "장르적 허세와 과장은 반복/독해 실패/상태 carryover 훼손이 있을 때만 수정 후보입니다."
+            ),
+            "hard_carryover_rule": (
+                "숫자, 금액, 시간, 지분, 직함, 완료/미완료 상태는 장르적 허용으로 강등하기 전 앞뒤 상태를 모두 대조합니다."
             ),
         },
         "verisimilitude_candidate_count": verisimilitude_summary["total_count"],

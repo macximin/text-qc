@@ -14,6 +14,8 @@
 - 문장부호 오류
 - 명백한 단어 오기
 
+단순 맞춤법, 띄어쓰기, 문장 호흡은 `ⓐ` 자동승인으로 보고, 판단용 검수본에서는 파란 교정문으로 표시합니다.
+
 ### 작가 판단 `ⓐⓐ`
 
 의도일 수 있습니다.
@@ -39,19 +41,30 @@
 
 적극 편집은 기본적으로 `ⓐⓐ`입니다. 의미와 말투를 거의 건드리지 않는 확실한 정리만 `ⓐ`로 둡니다.
 
-편집자 모드에서는 HWP/HWPX 파란줄을 기본 산출물로 쓰지 않습니다. `changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 만들고, 그 diff를 보고 승인/반려합니다.
+편집자 모드에서는 HWP/HWPX 파란줄을 기본 산출물로 쓰지 않습니다. `changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 만듭니다. 사람이 판단하는 흐름에서는 별도의 마커 표시 검수본을 함께 생성하고, 그 검수본을 보고 승인/반려합니다.
 
-`edit_class=ai_slop_cleanup`은 사람이 바로 알 수 있게 `reason`과 HWPX 의견에 `AI-slop 신호:`를 직접 표시합니다. 반복 표현, 추상 강도어, 빈 감탄, 균질한 문장 리듬 중 무엇을 줄이는지 밝히고, 단순히 "압축", "덜어냄"으로만 쓰지 않습니다.
+`edit_class=ai_slop_cleanup`은 사람이 바로 알 수 있게 `reason`과 마커 검수본 의견에 `AI-slop 신호:`를 직접 표시합니다. 반복 표현, 추상 강도어, 빈 감탄, 균질한 문장 리듬 중 무엇을 줄이는지 밝히고, 단순히 "압축", "덜어냄"으로만 쓰지 않습니다.
 
-`insert_before`/`insert_after`의 `find`는 가능하면 회차 제목이나 소제목이 아니라 실제 본문 문장을 앵커로 잡습니다. 불가피하게 회차 헤더를 앵커로 잡은 경우에도 중간 검토용 HWPX는 `ⓐⓐ` 의견을 헤더 줄에 붙이지 않고 별도 문단으로 분리합니다.
+`insert_before`/`insert_after`의 `find`는 가능하면 회차 제목이나 소제목이 아니라 실제 본문 문장을 앵커로 잡습니다. 불가피하게 회차 헤더를 앵커로 잡은 경우에도 중간 검토용 마커 검수본은 `ⓐⓐ` 의견을 헤더 줄에 붙이지 않고 별도 문단으로 분리합니다.
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 render-marked-manuscript-md --run-root "workspace\{work}\runs\{run_id}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 render-marked-manuscript-hwpx --run-root "workspace\{work}\runs\{run_id}" --loop-label loop_01
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}"
 .\scripts\novel-qc-loop.ps1 apply-changes-text --run-root "workspace\{work}\runs\{run_id}" --accept-aa
 ```
 
-`render-marked-manuscript-hwpx`는 루프 중간 확인용 산출물입니다. 원문 순서 그대로 `ⓐ{원문|수정}`과 `ⓐⓐ(의견: ... / 제안: ...)`을 삽입한 검토본이며, 파란색은 제안문이나 의견을 뜻합니다. `ⓐⓐ`는 모두 의견 메모로만 표시하고 원문을 치환하지 않습니다. 이 파일도 최종 원고 적용본은 아닙니다.
+`render-marked-manuscript-md`와 `render-marked-manuscript-hwpx`는 루프 중간 확인용 산출물입니다. 원문 순서 그대로 `ⓐ{원문|수정}`과 `ⓐⓐ{원문|후보문장}[판단: ...]`을 삽입한 검토본이며, 파란색은 승인 시 들어가거나 실행되는 교정문, 후보문장, 판단 사유를 뜻합니다. `ⓐⓐ`도 `ⓐ`와 같은 비교 구조를 쓰되, 판단 사유를 대괄호에 추가합니다. 이 파일도 최종 원고 적용본은 아닙니다.
+
+`ⓐⓐ`의 `replace`에는 "정본 확정 필요", "보류", "backpatch 감시" 같은 메모만 넣지 않습니다. 승인하면 본문에 들어갈 수 있는 문장, 문단, 삭제/추가 후보만 넣고, 판단 근거와 보류 사유는 `reason`에 씁니다.
+
+동일 인물, 기업, 기관으로 정본이 확정된 고유명사는 대표 표기 하나로 통일합니다. 약칭, 이니셜, 실명/가명 병기를 자동으로 의도 처리하지 않습니다. 시세판, 기사 헤드라인, 괄호 설명처럼 축약 자체가 장면 기능을 가질 때만 `ⓐⓐ{약칭|정본 또는 유지 후보}[판단: 축약 기능 근거]`로 예외 후보를 올립니다. 별도 설정 회사나 동명이인은 통일 대상이 아니므로 앞뒤 문맥에서 같은 대상인지 확인합니다.
+
+마커 계층:
+
+- 치환: `ⓐ{원문|교정문}`, `ⓐⓐ{원문|후보문장}[판단: 사유]`
+- 추가: `ⓐ{|추가문}`, `ⓐⓐ{|추가문}[판단: 사유]`
+- 삭제: `ⓐ{삭제문|}`, `ⓐⓐ{삭제문|}[판단: 사유]`
 
 표식 카운트는 `ⓐ` 교정과 `ⓐⓐ` 판단을 분리합니다. `ⓐ{` 단순 문자열 카운트는 `ⓐⓐ{...}`를 오인할 수 있으므로 금지하고, 렌더 명령의 `marker_counts`와 `rendered_marker_counts`를 기준으로 보고합니다.
 
@@ -74,7 +87,7 @@
 
 허용 표기와 문체 판단이 섞이는 항목은 스타일 시트가 없으면 자동 일괄 치환하지 않습니다. `해주다`, `굳어있다`, `추천해주세요`처럼 붙여 쓰기 허용이나 대사 리듬이 얽힌 항목은 별도 스타일 루프나 `ⓐⓐ` 판단으로 남깁니다.
 
-산출물은 편집자 모드와 분리합니다. 예: `corrections/loop_06_proofread_changes.json`, `corrections/loop_06_proofread_diff.md`, `final_manuscript/loop_06_proofread_candidate.txt`, `human-facing/loop_06_proofread_marked_manuscript.hwpx`.
+산출물은 편집자 모드와 분리합니다. 예: `corrections/loop_06_proofread_changes.json`, `corrections/loop_06_proofread_diff.md`, `final_manuscript/loop_06_proofread_candidate.txt`, `human-facing/loop_06_proofread_marked_manuscript.md`, `human-facing/loop_06_proofread_marked_manuscript.hwpx`.
 
 ## 문맥형 오타
 
