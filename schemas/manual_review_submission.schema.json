@@ -6,6 +6,7 @@
   "properties": {
     "schema_version": { "const": "manual_review_submission.v1" },
     "status": { "enum": ["pending", "in_progress", "complete"] },
+    "gate_profile": { "enum": ["proofread", "correction", "editorial", "consistency", "delivery"] },
     "reviewer": { "type": "string" },
     "reviewed_at": { "type": "string" },
     "review_protocol": {

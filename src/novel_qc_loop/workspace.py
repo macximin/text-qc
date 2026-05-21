@@ -236,6 +236,7 @@ def create_run(
     workspace_root: Path,
     work_slug: str,
     kind: str,
+    gate_profile: str = "delivery",
     source_text_path: str = "",
     notes: list[str] | None = None,
 ) -> Path:
@@ -254,6 +255,7 @@ def create_run(
         run_id=run_id,
         work_slug=safe_slug(work_slug),
         kind=safe_slug(kind),
+        gate_profile=gate_profile,
         source_text_path=source_text_path,
         notes=list(notes or []),
         stages={

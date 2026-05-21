@@ -52,6 +52,154 @@ TOTAL_CONSISTENCY_REPORT_NAME = "total_consistency_report.md"
 NUMBERED_ONE_PAGE_REPORT_NAME = "1차_one_page_report.md"
 HARNESS_ADVERSARIAL_AUDIT_NAME = "harness_adversarial_audit_3pass.md"
 
+AUTHORITY_LAYERS: tuple[dict[str, str], ...] = (
+    {
+        "layer": "protocol_constants",
+        "authority": "code",
+        "rule": "하네스 계약의 최종 권위는 novel_qc_loop.protocol의 상수와 gate profile 정의다.",
+    },
+    {
+        "layer": "run_manifest",
+        "authority": "run",
+        "rule": "개별 run은 run_manifest.json의 gate_profile과 artifacts를 실행 권위로 삼는다.",
+    },
+    {
+        "layer": "manual_review_submission",
+        "authority": "submission",
+        "rule": "감리 완료 여부는 manual_review_submission.json을 gate profile에 맞춰 검증한다.",
+    },
+    {
+        "layer": "human_facing_report",
+        "authority": "delivery",
+        "rule": "외부 전달 권위는 validate-report를 통과한 human-facing 보고서와 최종 후보본이다.",
+    },
+)
+
+GATE_PROFILE_DELIVERY = "delivery"
+GATE_PROFILE_CONSISTENCY = "consistency"
+GATE_PROFILE_EDITORIAL = "editorial"
+GATE_PROFILE_CORRECTION = "correction"
+GATE_PROFILE_PROOFREAD = "proofread"
+
+GATE_PROFILE_ORDER: tuple[str, ...] = (
+    GATE_PROFILE_PROOFREAD,
+    GATE_PROFILE_CORRECTION,
+    GATE_PROFILE_EDITORIAL,
+    GATE_PROFILE_CONSISTENCY,
+    GATE_PROFILE_DELIVERY,
+)
+
+FULL_REVIEW_AXIS_IDS: tuple[str, ...] = tuple(item["axis"] for item in REVIEW_AXES)
+SURFACE_REVIEW_AXIS_IDS: tuple[str, ...] = (
+    "submission_hygiene",
+    "reader_facing_polish",
+)
+EDITORIAL_REVIEW_AXIS_IDS: tuple[str, ...] = (
+    "replay_vs_escalation",
+    "front_back_bridge",
+    "character_consistency",
+    "submission_hygiene",
+    "reader_facing_polish",
+    "non_reader_facing_notes",
+)
+
+GATE_PROFILE_DEFINITIONS: dict[str, dict[str, object]] = {
+    GATE_PROFILE_PROOFREAD: {
+        "level": 1,
+        "label": "표면 교정/송고 위생",
+        "required_axes": SURFACE_REVIEW_AXIS_IDS,
+        "require_primary_passes": False,
+        "require_blind_reviews": False,
+        "require_total_report": False,
+        "require_adversarial_passes": False,
+        "require_consistency_repetition": False,
+        "require_delivery_report": False,
+        "summary": "오탈자, 띄어쓰기, 문장부호, 송고 위생만 닫는 가벼운 gate.",
+    },
+    GATE_PROFILE_CORRECTION: {
+        "level": 2,
+        "label": "교정안 작성/마커 검수",
+        "required_axes": (*SURFACE_REVIEW_AXIS_IDS, "non_reader_facing_notes"),
+        "require_primary_passes": False,
+        "require_blind_reviews": False,
+        "require_total_report": False,
+        "require_adversarial_passes": False,
+        "require_consistency_repetition": False,
+        "require_delivery_report": False,
+        "summary": "ⓐ/ⓐⓐ 교정안과 판단 근거를 준비하되 full consistency gate는 요구하지 않는다.",
+    },
+    GATE_PROFILE_EDITORIAL: {
+        "level": 3,
+        "label": "적극 편집 후보",
+        "required_axes": EDITORIAL_REVIEW_AXIS_IDS,
+        "require_primary_passes": True,
+        "require_blind_reviews": False,
+        "require_total_report": False,
+        "require_adversarial_passes": False,
+        "require_consistency_repetition": False,
+        "require_delivery_report": False,
+        "summary": "편집자 모드 진입 전 최소 정합성 장부를 요구하되 blind 3x3 납품 gate는 요구하지 않는다.",
+    },
+    GATE_PROFILE_CONSISTENCY: {
+        "level": 4,
+        "label": "전 회차 정합성 감리",
+        "required_axes": FULL_REVIEW_AXIS_IDS,
+        "require_primary_passes": True,
+        "require_blind_reviews": True,
+        "require_total_report": True,
+        "require_adversarial_passes": True,
+        "require_consistency_repetition": True,
+        "require_delivery_report": False,
+        "summary": "정합성 검사 단위 전체를 닫지만 외부 납품 보고서는 별도 gate로 둔다.",
+    },
+    GATE_PROFILE_DELIVERY: {
+        "level": 5,
+        "label": "납품/최종 제출",
+        "required_axes": FULL_REVIEW_AXIS_IDS,
+        "require_primary_passes": True,
+        "require_blind_reviews": True,
+        "require_total_report": True,
+        "require_adversarial_passes": True,
+        "require_consistency_repetition": True,
+        "require_delivery_report": True,
+        "summary": "기존 full gate. 모든 정합성 감리와 human-facing 보고서 검증을 요구한다.",
+    },
+}
+
+GATE_PROFILE_ALIASES: dict[str, str] = {
+    "audit": GATE_PROFILE_CONSISTENCY,
+    "global-audit": GATE_PROFILE_CONSISTENCY,
+    "검수": GATE_PROFILE_CONSISTENCY,
+    "consistency": GATE_PROFILE_CONSISTENCY,
+    "정합성": GATE_PROFILE_CONSISTENCY,
+    "full": GATE_PROFILE_DELIVERY,
+    "full-qc-correction": GATE_PROFILE_DELIVERY,
+    "delivery": GATE_PROFILE_DELIVERY,
+    "전체": GATE_PROFILE_DELIVERY,
+    "납품": GATE_PROFILE_DELIVERY,
+    "correction": GATE_PROFILE_CORRECTION,
+    "correction-pass": GATE_PROFILE_CORRECTION,
+    "교정": GATE_PROFILE_CORRECTION,
+    "editor": GATE_PROFILE_EDITORIAL,
+    "editorial": GATE_PROFILE_EDITORIAL,
+    "editorial-pass": GATE_PROFILE_EDITORIAL,
+    "편집": GATE_PROFILE_EDITORIAL,
+    "편집자": GATE_PROFILE_EDITORIAL,
+    "proofread": GATE_PROFILE_PROOFREAD,
+    "proofread-pass": GATE_PROFILE_PROOFREAD,
+    "표면교정": GATE_PROFILE_PROOFREAD,
+}
+
+
+def normalize_gate_profile(value: object) -> str:
+    key = str(value or "").strip().lower().replace("_", "-")
+    return GATE_PROFILE_ALIASES.get(key, key if key in GATE_PROFILE_DEFINITIONS else GATE_PROFILE_DELIVERY)
+
+
+def gate_profile_definition(value: object) -> dict[str, object]:
+    return GATE_PROFILE_DEFINITIONS[normalize_gate_profile(value)]
+
+
 DEFAULT_CONSISTENCY_UNIT_COUNT = 1
 CONSISTENCY_CHECK_UNIT_ID = "consistency_3x3_unit"
 CONSISTENCY_CHECK_UNIT_SUMMARY = (

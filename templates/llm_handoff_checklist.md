@@ -1,6 +1,17 @@
 # LLM-facing Handoff Checklist
 
+## Gate Profile 권위
+
+- 이 run의 필수 범위는 `run_manifest.json`의 `gate_profile`이 정한다.
+- `delivery`: 아래 산출물을 모두 닫는 최종 납품 gate.
+- `consistency`: primary/blind/total/adversarial 정합성 감리는 닫되, 외부 납품 보고서는 별도 요청 시 검증한다.
+- `editorial`: 적극 편집 후보를 위한 최소 정합성 장부와 편집 근거를 닫는다.
+- `correction`: `ⓐ`/`ⓐⓐ` 교정안, 판단용 마커 검수본, 변경 근거를 닫는다.
+- `proofread`: 오탈자, 띄어쓰기, 문장부호, 송고 위생만 닫는다.
+
 ## 반드시 남길 산출물
+
+`delivery` profile 기준 전체 목록입니다. 다른 profile에서는 `manual_review_queue.jsonl`의 `required_for_gate=true` 항목과 `manual_review_submission.json`의 `gate_profile`을 우선합니다.
 
 - `llm-facing/global_audit_raw.md`: 내부용 원문 기반 검수.
 - `llm-facing/consistency_rounds/primary_pass1.md` 등 primary 3회: 전 회차 정합성/맥락 장부와 충돌 후보.
@@ -47,11 +58,12 @@
 
 ## 완료 조건
 
+- 아래는 `delivery` profile 기준 완료 조건입니다. 다른 profile에서는 `run_manifest.json`의 `gate_profile`, `manual_review_queue.jsonl`의 `required_for_gate=true`, `manual_review_submission.json`의 workflow requirements를 우선합니다.
 - P0/P1/P2가 분리되어 있고, P0/P1은 확정/95% 이상/직접 근거/반례 없음/작중 핍진성 영향 조건을 충족한다.
 - 패턴 검색은 후보 수집으로만 쓰였고, 최종 판단에는 앞뒤 문단/회차 독해 근거가 붙어 있다.
 - 외부 고증 항목은 작중 행동·상태·인과를 깨는 경우와 단순 보강 후보가 분리되어 있다.
-- `manual_review_submission.json`의 3-pass와 감리 축 상태가 채워져 있다.
-- primary 3-pass, blind 3개 lane x 3-pass, total consistency report, adversarial 3-pass가 완료 상태다.
+- `manual_review_submission.json`의 profile 필수 감리 축과 workflow 상태가 채워져 있다.
+- `delivery`/`consistency` profile에서는 primary 3-pass, blind 3개 lane x 3-pass, total consistency report, adversarial 3-pass가 완료 상태다.
 - `정합성 검사 N번` 요청 시 `consistency_repetition_contract.requested_unit_count=N`이고, 완료 unit도 N개다.
 - `validate-submission` 결과가 남아 있고 통과 상태다.
 - `validate-report` 결과가 남아 있고 통과 상태다.

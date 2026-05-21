@@ -96,6 +96,6 @@ Run: `{{run_id}}`
 - `evidence/submission/manual_review_submission.json`
 - `human-facing/1차_one_page_report.md`
 
-최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`를 통과해야 제출 가능하다.
+`delivery` profile의 최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`를 통과해야 제출 가능하다. `consistency` profile은 감리 제출을 닫고, 보고서는 별도 납품 요청이 있을 때 검증한다.
 
-편집자 모드는 이 3-pass와 `llm-facing/episode_deep_dive.md`, `llm-facing/consistency_report.md`가 채워진 뒤에만 실행한다. 교정 적용 뒤에는 같은 축으로 재평가하고, 해결/신규/회귀를 loop 기록에 남긴다.
+`delivery`/`consistency` profile의 편집자 모드는 이 3-pass와 `llm-facing/episode_deep_dive.md`, `llm-facing/consistency_report.md`가 채워진 뒤에만 실행한다. `editorial` profile은 `manual_review_queue.jsonl`의 `required_for_gate=true` 항목과 `consistency_report.md`의 진입 판정을 우선한다. 교정 적용 뒤에는 같은 축으로 재평가하고, 해결/신규/회귀를 loop 기록에 남긴다.

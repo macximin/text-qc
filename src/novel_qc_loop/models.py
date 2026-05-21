@@ -37,6 +37,7 @@ class RunManifest:
     run_id: str = ""
     work_slug: str = ""
     kind: str = "global-audit"
+    gate_profile: str = "delivery"
     status: str = "created"
     created_at: str = field(default_factory=utc_now_iso)
     source_text_path: str = ""

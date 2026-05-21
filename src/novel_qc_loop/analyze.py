@@ -10,7 +10,13 @@ from typing import Any
 
 from .models import MIN_CHAPTER_CHARS_NO_SPACE
 from .narrative import classify_bracketed_line
-from .protocol import HARD_CARRYOVER_KINDS, NUMBERED_ONE_PAGE_REPORT_NAME, PREMISE_POLICY_SUMMARY
+from .protocol import (
+    HARD_CARRYOVER_KINDS,
+    NUMBERED_ONE_PAGE_REPORT_NAME,
+    PREMISE_POLICY_SUMMARY,
+    gate_profile_definition,
+    normalize_gate_profile,
+)
 from .reports import require_completed_manual_review, validate_human_report
 from .submission import validate_manual_review_submission, workflow_blockers_from_validation, write_manual_review_scaffold
 from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitle_rows
@@ -191,6 +197,7 @@ ROLE_SUFFIXES = (
 
 @dataclass(slots=True)
 class AnalysisResult:
+    gate_profile: str
     source_text_path: str
     inspection_path: str
     episodes_dir: str
@@ -232,6 +239,7 @@ class AnalysisResult:
 def analyze_run(*, run_root: Path) -> AnalysisResult:
     manifest_path = run_root / "run_manifest.json"
     manifest = read_json(manifest_path)
+    gate_profile = normalize_gate_profile(manifest.get("gate_profile"))
     source_text_path = resolve_source_text_path(run_root, str(manifest.get("source_text_path") or ""))
     if not source_text_path.exists():
         raise FileNotFoundError(f"source_text_path not found: {source_text_path}")
@@ -336,7 +344,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     bridge_candidates_path = review_dir / "bridge_review_candidates.jsonl"
     write_jsonl(bridge_candidates_path, build_bridge_candidates(chapters))
 
-    manual_paths = write_manual_review_scaffold(submission_dir)
+    manual_paths = write_manual_review_scaffold(submission_dir, gate_profile=gate_profile)
     manual_review_queue_path = manual_paths["queue_path"]
     manual_review_submission_path = manual_paths["submission_path"]
 
@@ -357,6 +365,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             ai_slop_path=ai_slop_path,
             human_report_path=resolve_human_report_path(run_root, manifest),
             manual_review_submission_path=manual_review_submission_path,
+            gate_profile=gate_profile,
         ),
     )
 
@@ -394,6 +403,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             "submission_gate_path": str(submission_gate_path),
             "manual_review_queue_path": str(manual_review_queue_path),
             "manual_review_submission_path": str(manual_review_submission_path),
+            "gate_profile": gate_profile,
         }
     )
     if isinstance(manifest.get("stages"), dict):
@@ -401,6 +411,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     write_json(manifest_path, manifest)
 
     return AnalysisResult(
+        gate_profile=gate_profile,
         source_text_path=str(source_text_path),
         inspection_path=str(inspection_path),
         episodes_dir=str(episodes_dir),
@@ -1373,7 +1384,10 @@ def build_submission_gate(
     ai_slop_path: Path,
     human_report_path: Path,
     manual_review_submission_path: Path,
+    gate_profile: str = "delivery",
 ) -> dict[str, Any]:
+    gate_profile = normalize_gate_profile(gate_profile)
+    require_delivery_report = bool(gate_profile_definition(gate_profile).get("require_delivery_report"))
     verisimilitude_summary = summarize_verisimilitude_candidates(verisimilitude_candidates_path)
     hygiene_count = count_jsonl_rows(hygiene_flags_path)
     narrative_allowance_count = count_jsonl_rows(narrative_allowances_path)
@@ -1405,16 +1419,20 @@ def build_submission_gate(
     if not manual_ready:
         blockers.append("manual_review_not_complete")
     if human_report_path.exists():
-        human_report = require_completed_manual_review(
-            validate_human_report(human_report_path),
-            manual_review,
-        ).to_dict()
-        if not human_report.get("ready_for_delivery"):
+        if require_delivery_report:
+            human_report = require_completed_manual_review(
+                validate_human_report(human_report_path),
+                manual_review,
+            ).to_dict()
+        else:
+            human_report = validate_human_report(human_report_path).to_dict()
+        if require_delivery_report and not human_report.get("ready_for_delivery"):
             blockers.append("human_report_not_claim_evidence_ready")
-    else:
+    elif require_delivery_report:
         blockers.append("human_report_missing")
     payload = {
         "schema_version": "submission_gate.v1",
+        "gate_profile": gate_profile,
         "ready_for_submission": not blockers,
         "status": "blocked" if blockers else "ready",
         "blockers": blockers,

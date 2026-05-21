@@ -16,6 +16,7 @@ from .corrections import (
 from .hwpx_review import render_marked_manuscript_hwpx, render_marked_manuscript_md
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
+from .protocol import GATE_PROFILE_ORDER, normalize_gate_profile
 from .reports import (
     export_markdown_to_pdf,
     render_author_final_report,
@@ -73,6 +74,7 @@ def cmd_start_run(args: argparse.Namespace) -> int:
         workspace_root=root,
         work_slug=args.work,
         kind=args.kind,
+        gate_profile=normalize_gate_profile(args.gate_profile or args.kind),
         source_text_path=args.source,
         notes=args.note or [],
     )
@@ -390,7 +392,10 @@ def cmd_validate_report(args: argparse.Namespace) -> int:
         manual_path = run_root / "evidence" / "submission" / "manual_review_submission.json"
         if manual_path.exists():
             manual_validation = validate_manual_review_submission(manual_path).to_dict()
-        result = require_completed_manual_review(result, manual_validation)
+        requirements = manual_validation.get("workflow_requirements") if isinstance(manual_validation, dict) else None
+        require_delivery_report = not isinstance(requirements, dict) or bool(requirements.get("require_delivery_report"))
+        if require_delivery_report:
+            result = require_completed_manual_review(result, manual_validation)
     if args.output or args.run_root:
         output_path = Path(args.output).resolve() if args.output else default_output
         write_report_validation_result(result, output_path)
@@ -561,13 +566,18 @@ def refresh_submission_gate(run_root: Path, validation: dict[str, Any]) -> None:
         blockers.append("manual_review_not_complete")
     blockers.extend(workflow_blockers_from_validation(validation))
     report_path = resolve_one_page_report_path(run_root)
+    requirements = validation.get("workflow_requirements")
+    require_delivery_report = not isinstance(requirements, dict) or bool(requirements.get("require_delivery_report"))
     if report_path.exists():
-        report_validation = require_completed_manual_review(
-            validate_human_report(report_path),
-            validation,
-        ).to_dict()
+        if require_delivery_report:
+            report_validation = require_completed_manual_review(
+                validate_human_report(report_path),
+                validation,
+            ).to_dict()
+        else:
+            report_validation = validate_human_report(report_path).to_dict()
         gate["human_report"] = report_validation
-        if not report_validation.get("ready_for_delivery"):
+        if require_delivery_report and not report_validation.get("ready_for_delivery"):
             blockers.append("human_report_not_claim_evidence_ready")
     gate["manual_review"] = validation
     gate["blockers"] = sorted(set(blockers))
@@ -602,17 +612,19 @@ def refresh_submission_gate_report(
     ]
     if not gate_exists:
         blockers.append("evidence_not_generated")
-    if not validation.get("ready_for_delivery"):
-        blockers.append("human_report_not_claim_evidence_ready")
     manual_path = run_root / "evidence" / "submission" / "manual_review_submission.json"
     if manual_path.exists():
         manual_validation = manual_validation or validate_manual_review_submission(manual_path).to_dict()
         manual_validation = {**manual_validation, "path": str(manual_path)}
+    requirements = manual_validation.get("workflow_requirements") if isinstance(manual_validation, dict) else None
+    require_delivery_report = not isinstance(requirements, dict) or bool(requirements.get("require_delivery_report"))
+    if require_delivery_report and not validation.get("ready_for_delivery"):
+        blockers.append("human_report_not_claim_evidence_ready")
+    if manual_validation:
         gate["manual_review"] = manual_validation
         blockers = [item for item in blockers if item != "manual_review_not_complete"]
         if not manual_validation.get("ready_for_submission"):
             blockers.append("manual_review_not_complete")
-        blockers.extend(workflow_blockers_from_validation(manual_validation))
         blockers.extend(workflow_blockers_from_validation(manual_validation))
     else:
         blockers.append("manual_review_not_complete")
@@ -722,6 +734,7 @@ def cmd_intake(args: argparse.Namespace) -> int:
         workspace_root=_workspace_root(args.workspace),
         templates_root=Path(args.templates).resolve(),
         mode=args.mode,
+        gate_profile=args.gate_profile or "",
         title=args.title,
         slug=args.slug,
         author=args.author,
@@ -743,6 +756,7 @@ def cmd_intake_inbox(args: argparse.Namespace) -> int:
         workspace_root=_workspace_root(args.workspace),
         templates_root=Path(args.templates).resolve(),
         mode=args.mode,
+        gate_profile=args.gate_profile or "",
         genre=args.genre,
         audience=args.audience,
         platform=args.platform,
@@ -872,6 +886,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_run.add_argument("--workspace", default="workspace")
     start_run.add_argument("--work", required=True)
     start_run.add_argument("--kind", default="global-audit")
+    start_run.add_argument("--gate-profile", choices=list(GATE_PROFILE_ORDER), help="override kind-derived gate profile")
     start_run.add_argument("--source", default="")
     start_run.add_argument("--note", action="append")
     start_run.set_defaults(func=cmd_start_run)
@@ -1016,8 +1031,22 @@ def build_parser() -> argparse.ArgumentParser:
     intake.add_argument(
         "--mode",
         default="full",
-        choices=["audit", "correction", "editor", "editorial", "full", "검수", "교정", "편집", "편집자", "전체"],
+        choices=[
+            "audit",
+            "correction",
+            "editor",
+            "editorial",
+            "full",
+            "proofread",
+            "검수",
+            "교정",
+            "편집",
+            "편집자",
+            "전체",
+            "표면교정",
+        ],
     )
+    intake.add_argument("--gate-profile", choices=list(GATE_PROFILE_ORDER), help="override mode-derived gate profile")
     intake.add_argument("--title", default="")
     intake.add_argument("--slug", default="")
     intake.add_argument("--author", default="")
@@ -1035,8 +1064,22 @@ def build_parser() -> argparse.ArgumentParser:
     intake_box.add_argument(
         "--mode",
         default="full",
-        choices=["audit", "correction", "editor", "editorial", "full", "검수", "교정", "편집", "편집자", "전체"],
+        choices=[
+            "audit",
+            "correction",
+            "editor",
+            "editorial",
+            "full",
+            "proofread",
+            "검수",
+            "교정",
+            "편집",
+            "편집자",
+            "전체",
+            "표면교정",
+        ],
     )
+    intake_box.add_argument("--gate-profile", choices=list(GATE_PROFILE_ORDER), help="override mode-derived gate profile")
     intake_box.add_argument("--genre", default="")
     intake_box.add_argument("--audience", default="")
     intake_box.add_argument("--platform", default="")

@@ -24,6 +24,16 @@
 .\scripts\novel-qc-loop.ps1 intake --input "C:\path\to\manuscript.txt" --mode full --analyze
 ```
 
+`--mode`는 기본 gate profile을 정합니다. 필요하면 `--gate-profile`로 명시합니다.
+
+- `proofread`: 표면 교정/송고 위생만 닫습니다.
+- `correction`: `ⓐ`/`ⓐⓐ` 교정안과 마커 검수본을 닫습니다.
+- `editorial`: 적극 편집 후보에 필요한 최소 정합성 장부를 닫습니다.
+- `consistency`: full consistency unit을 닫되 납품 보고서는 별도입니다.
+- `delivery`: 기존 full 납품 gate입니다.
+
+권위 순서는 `protocol.py` 코드 정의 -> `run_manifest.json`의 `gate_profile` -> `manual_review_submission.json` -> `human-facing` 납품 보고서입니다.
+
 초기 원고함 일괄 처리:
 
 ```powershell
@@ -69,7 +79,7 @@ Pass 3: AI 티/문체
 - 반복 표현
 - 불필요한 거창함
 
-완료 후 `evidence/submission/manual_review_submission.json`을 채우고 검증합니다. 완료 상태는 primary 정합성/맥락 장부 3회, blind 3개 lane x 3회, `llm-facing/total_consistency_report.md`, 통합본 대상 적대적 감리 3회가 모두 채워져야 합니다. 이 전체 묶음이 1개 `consistency_3x3_unit`이고, `정합성 검사 3번`은 이 묶음을 세 번 반복한다는 뜻입니다.
+완료 후 `evidence/submission/manual_review_submission.json`을 채우고 검증합니다. `delivery`와 `consistency` profile의 완료 상태는 primary 정합성/맥락 장부 3회, blind 3개 lane x 3회, `llm-facing/total_consistency_report.md`, 통합본 대상 적대적 감리 3회가 모두 채워져야 합니다. 이 전체 묶음이 1개 `consistency_3x3_unit`이고, `정합성 검사 3번`은 이 묶음을 세 번 반복한다는 뜻입니다.
 
 ```powershell
 .\scripts\novel-qc-loop.ps1 validate-submission --run-root "workspace\{work}\runs\{run_id}"
@@ -86,7 +96,7 @@ Pass 3: AI 티/문체
 - 추가 작업의 `find`는 빈 값이 아니라 실제 원문 위치를 잡는 앵커입니다.
 - 편집자 모드 적용본은 HWP/HWPX가 아니라 `apply-changes-text`로 plain text 후보본과 Markdown diff를 만듭니다.
 - 중간 확인용 판단본은 `render-marked-manuscript-md`로 원문 순서 그대로 기호를 삽입한 MD 검수본을 만듭니다. 한글 검토나 납품 요구가 있으면 `render-marked-manuscript-hwpx`도 함께 만듭니다.
-- 편집자 모드는 primary 정합성 3-pass, blind 3개 lane x 3-pass, total 정합성 리포트, 적대적 감리 3-pass, 화별 수동 딥다이브, 정합성 리포트 이후에만 실행합니다.
+- `delivery`/`consistency` profile의 편집자 모드는 primary 정합성 3-pass, blind 3개 lane x 3-pass, total 정합성 리포트, 적대적 감리 3-pass, 화별 수동 딥다이브, 정합성 리포트 이후에만 실행합니다. `editorial` profile은 `manual_review_queue.jsonl`의 `required_for_gate=true` 항목과 `consistency_report` 진입 판정을 따릅니다.
 - 세계관 안에서 세운 제도/기술/경제 규칙은 전제로 수용하고, 맥락 없이 던진 시대 불가능 설정은 작가 판단 또는 전제 보강으로 분리합니다.
 - 웹소설식 허세와 과장은 결함이 아니며, 숫자/금액/시간/지분/직함/완료 상태 carryover는 엄격히 봅니다.
 - 중복 회차 정본 선택에서는 공백 제외 4000자 이상을 강한 원칙으로 삼고, 삭제 후 남는 회차가 4000자 미만이면 삭제 확정 대신 결락/추가/보류로 둡니다.

@@ -20,6 +20,8 @@ from .protocol import (
     NUMBERED_ONE_PAGE_REPORT_NAME,
     PASS_NAMES,
     TOTAL_CONSISTENCY_REPORT_NAME,
+    gate_profile_definition,
+    normalize_gate_profile,
 )
 from .submission import write_manual_review_scaffold
 from .workspace import (
@@ -93,6 +95,7 @@ class IntakeResult:
     title: str
     slug: str
     mode: str
+    gate_profile: str
     work_root: str
     run_root: str
     original_path: str
@@ -455,8 +458,14 @@ def mode_to_run_kind(mode: str) -> str:
         "편집자": "editorial-pass",
         "full": "full-qc-correction",
         "전체": "full-qc-correction",
+        "proofread": "proofread-pass",
+        "표면교정": "proofread-pass",
     }
     return aliases.get(normalized, normalized or "global-audit")
+
+
+def mode_to_gate_profile(mode: str) -> str:
+    return normalize_gate_profile(mode_to_run_kind(mode) or mode)
 
 
 def render_template(template: str, values: dict[str, Any]) -> str:
@@ -481,6 +490,7 @@ def intake_manuscript(
     workspace_root: Path,
     templates_root: Path,
     mode: str = "full",
+    gate_profile: str = "",
     title: str = "",
     slug: str = "",
     author: str = "",
@@ -550,17 +560,23 @@ def intake_manuscript(
     extracted_text_path.write_text(source_text, encoding="utf-8")
 
     run_kind = mode_to_run_kind(mode)
+    active_gate_profile = normalize_gate_profile(gate_profile) if gate_profile else mode_to_gate_profile(mode)
+    gate_definition = gate_profile_definition(active_gate_profile)
     run_root = create_run(
         workspace_root=workspace_root,
         work_slug=work_slug,
         kind=run_kind,
+        gate_profile=active_gate_profile,
         source_text_path=str(extracted_text_path),
-        notes=[f"mode={mode}", "created by intake harness"],
+        notes=[f"mode={mode}", f"gate_profile={active_gate_profile}", "created by intake harness"],
     )
 
     inspection = inspect_text(extracted_text_path)
     write_json(run_root / "evidence" / "inspection.json", inspection.to_dict())
-    manual_paths = write_manual_review_scaffold(run_root / "evidence" / "submission")
+    manual_paths = write_manual_review_scaffold(
+        run_root / "evidence" / "submission",
+        gate_profile=active_gate_profile,
+    )
     package_qc_paths: dict[str, Path] = {}
     if contains_epub_input(input_path):
         package_qc = inspect_epub_packages(input_path)
@@ -573,6 +589,9 @@ def intake_manuscript(
         "run_root": str(run_root),
         "mode": mode,
         "run_kind": run_kind,
+        "gate_profile": active_gate_profile,
+        "gate_profile_label": gate_definition["label"],
+        "gate_profile_summary": gate_definition["summary"],
         "genre": genre or "미지정",
         "audience": audience or "미지정",
         "platform": platform or "미지정",
@@ -697,6 +716,7 @@ def intake_manuscript(
         title=inferred_title,
         slug=work_slug,
         mode=mode,
+        gate_profile=active_gate_profile,
         work_root=str(work_root),
         run_root=str(run_root),
         original_path=str(original_path),
@@ -714,6 +734,7 @@ def intake_inbox(
     workspace_root: Path,
     templates_root: Path,
     mode: str = "full",
+    gate_profile: str = "",
     genre: str = "",
     audience: str = "",
     platform: str = "",
@@ -736,6 +757,7 @@ def intake_inbox(
                 workspace_root=workspace_root,
                 templates_root=templates_root,
                 mode=mode,
+                gate_profile=gate_profile,
                 genre=genre,
                 audience=audience,
                 platform=platform,

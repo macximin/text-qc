@@ -8,6 +8,7 @@
     "run_id": { "type": "string", "minLength": 1 },
     "work_slug": { "type": "string", "minLength": 1 },
     "kind": { "type": "string", "minLength": 1 },
+    "gate_profile": { "enum": ["proofread", "correction", "editorial", "consistency", "delivery"] },
     "status": { "type": "string" },
     "created_at": { "type": "string" },
     "source_text_path": { "type": "string" },

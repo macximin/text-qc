@@ -3,6 +3,18 @@
 작품: `{{title}}` (`{{work_slug}}`)
 Run: `{{run_id}}`
 모드: `{{mode}}` / `{{run_kind}}`
+Gate profile: `{{gate_profile}}` / `{{gate_profile_label}}`
+
+`{{gate_profile_summary}}`
+
+## 권위 계층
+
+1. 코드 권위: `novel_qc_loop.protocol`의 gate profile과 하네스 계약 상수.
+2. Run 권위: 이 run의 `run_manifest.json`에 기록된 `gate_profile`과 artifact 경로.
+3. 제출 권위: `evidence/submission/manual_review_submission.json`의 완료 상태.
+4. 납품 권위: `validate-report`를 통과한 `human-facing` 보고서와 최종 후보본.
+
+작업 범위는 gate profile을 따른다. `delivery`가 아닌 profile에서는 full 납품 gate를 임의로 끌어오지 않는다.
 
 ## 입력
 
@@ -28,6 +40,8 @@ Run: `{{run_id}}`
 .\scripts\novel-qc-loop.ps1 validate-report --run-root "{{run_root}}"
 ```
 
+`validate-report`는 납품 profile에서 필수다. `proofread`, `correction`, `editorial`, `consistency` profile에서는 보고서가 필요한 경우에만 별도 산출물로 검증한다.
+
 ## 작업 원칙
 
 - 원본 파일은 절대 덮어쓰지 않는다.
@@ -51,7 +65,7 @@ Run: `{{run_id}}`
 - human-facing 보고서는 한국어로 쓰고, 모든 핵심 판단에 `주장`과 `근거`를 함께 둔다.
 - 근거 없는 주장은 최종 보고서에 올리지 않는다.
 - human-facing N차 보고서에는 누적 P0-P3 장부를 두고, 최초 차수, 현재 상태, 주장, 근거, 처리 방향을 함께 쓴다.
-- 최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`까지 통과해야 제출 가능하다.
+- `delivery` profile의 최종 보고서는 `validate-submission`이 통과된 뒤 `validate-report`까지 통과해야 제출 가능하다.
 - P0/P1은 최종 감리에서 확정, 95% 이상 확신, 직접 근거, 미해결 반례 없음, 작중 핍진성 영향이 모두 맞는 항목만 사용한다.
 - 날짜/요일/영업일 같은 외부 고증은 작중 행동·상태·인과가 깨지는 경우에만 강한 이슈로 올린다.
 - 세계관 안에서 세운 제도/기술/경제 규칙은 전제로 수용한다. 맥락 없이 던진 시대 불가능 설정은 worldbuilding gap 또는 작가 판단 필요로 분리한다.
@@ -86,7 +100,8 @@ Run: `{{run_id}}`
 ### editor / 편집
 
 - 교정자가 아니라 매우 적극적인 편집자로 작업한다.
-- 편집자 모드는 `adversarial_audit_3pass`, `episode_deep_dive`, `consistency_report` 이후에만 실행한다.
+- `delivery`/`consistency` profile에서는 `adversarial_audit_3pass`, `episode_deep_dive`, `consistency_report` 이후에만 실행한다.
+- `editorial` profile에서는 `manual_review_queue.jsonl`의 `required_for_gate=true` 항목과 `consistency_report`의 진입 판정을 우선한다.
 - 작품의 기대 품질이 AI-slop일 수 있음을 전제로, 중복 문장, 단조로운 문장 리듬, 추상 감정어 반복, 빠진 인과 브리지를 적극적으로 고친다.
 - 필요하면 문장 단위 치환, 삭제, 추가를 모두 제안한다.
 - 적극 편집은 기본적으로 `ⓐⓐ`로 올리고, 작가 승인 전 최종 원고에 확정 반영하지 않는다.

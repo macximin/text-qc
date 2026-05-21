@@ -25,11 +25,15 @@ from novel_qc_loop.protocol import (  # noqa: E402
     CANONICAL_NAME_ALIAS_RULE,
     CONSISTENCY_CHECK_UNIT_ID,
     EXCLUDED_REVIEW_SCOPES,
+    GATE_PROFILE_CONSISTENCY,
+    GATE_PROFILE_CORRECTION,
+    GATE_PROFILE_DELIVERY,
     NTH_REPORT_VISIBLE_PRIORITIES,
     PASS_NAMES,
 )
 from novel_qc_loop.submission import (  # noqa: E402
     build_empty_manual_review_submission,
+    build_manual_review_queue,
     validate_manual_review_submission,
 )
 from novel_qc_loop.workspace import (  # noqa: E402
@@ -307,6 +311,10 @@ class HarnessGuardTests(unittest.TestCase):
         payload = build_empty_manual_review_submission()
 
         self.assertIn("review_protocol", payload)
+        self.assertEqual(GATE_PROFILE_DELIVERY, payload["gate_profile"])
+        self.assertEqual(GATE_PROFILE_DELIVERY, payload["review_protocol"]["active_gate_profile"])
+        self.assertIn("authority_layers", payload["review_protocol"])
+        self.assertIn("gate_profiles", payload["review_protocol"])
         self.assertEqual(CONSISTENCY_CHECK_UNIT_ID, payload["review_protocol"]["consistency_check_unit_id"])
         self.assertEqual(list(NTH_REPORT_VISIBLE_PRIORITIES), payload["review_protocol"]["nth_report_visible_priorities"])
         self.assertIn("누적 장부", payload["review_protocol"]["nth_report_cumulative_rule"])
@@ -319,6 +327,34 @@ class HarnessGuardTests(unittest.TestCase):
             self.assertEqual(set(PASS_NAMES), set(payload["blind_reviews"][reviewer]["passes"]))
         self.assertEqual(set(PASS_NAMES), set(payload["adversarial_passes"]))
         self.assertEqual("pending", payload["total_consistency_report"]["status"])
+
+    def test_correction_gate_profile_does_not_require_full_delivery_workflow(self) -> None:
+        payload = build_empty_manual_review_submission(GATE_PROFILE_CORRECTION)
+        payload["status"] = "complete"
+        payload["reviewer"] = "tester"
+        payload["reviewed_at"] = "2026-05-21"
+        payload["final_summary"] = "교정안과 판단용 마커 검수본 기준 완료"
+        for axis in payload["checked_axes"]:
+            if axis["axis"] in {"submission_hygiene", "reader_facing_polish", "non_reader_facing_notes"}:
+                axis["status"] = "checked"
+                axis["notes"] = "profile axis checked"
+
+        result = validate_payload(payload)
+
+        self.assertTrue(result.ready_for_submission)
+        self.assertEqual(GATE_PROFILE_CORRECTION, result.gate_profile)
+        self.assertEqual(0, result.required_pass_count)
+        self.assertEqual(3, result.required_axis_count)
+
+    def test_gate_profile_marks_non_required_queue_tasks_skipped(self) -> None:
+        correction_rows = build_manual_review_queue(GATE_PROFILE_CORRECTION)
+        consistency_rows = build_manual_review_queue(GATE_PROFILE_CONSISTENCY)
+
+        self.assertTrue(correction_rows)
+        self.assertTrue(any(row["required_for_gate"] for row in correction_rows if row["phase"] == "profile_axis_review"))
+        self.assertTrue(all(row["status"] == "skipped" for row in correction_rows if row["phase"] == "primary_consistency_review"))
+        self.assertFalse(any(row["required_for_gate"] for row in correction_rows if row["phase"] == "blind_consistency_review"))
+        self.assertTrue(any(row["required_for_gate"] for row in consistency_rows if row["phase"] == "blind_consistency_review"))
 
     def test_harness_excludes_ethics_line_as_review_scope(self) -> None:
         payload = build_empty_manual_review_submission()

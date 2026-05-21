@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .protocol import (
+    AUTHORITY_LAYERS,
     BLIND_REVIEWERS,
     CONSISTENCY_CHECK_UNIT_ID,
     CONSISTENCY_CHECK_UNIT_SUMMARY,
@@ -17,6 +18,9 @@ from .protocol import (
     CANONICAL_NAME_ALIAS_RULE,
     EXCLUDED_REVIEW_SCOPES,
     HARD_CARRYOVER_KINDS,
+    GATE_PROFILE_DEFINITIONS,
+    GATE_PROFILE_DELIVERY,
+    GATE_PROFILE_ORDER,
     NTH_REPORT_CUMULATIVE_RULE,
     NTH_REPORT_VISIBLE_PRIORITIES,
     PASS_NAMES,
@@ -24,6 +28,8 @@ from .protocol import (
     REPAIRABILITY_VALUES,
     REVIEW_AXES,
     TOTAL_CONSISTENCY_REPORT_NAME,
+    gate_profile_definition,
+    normalize_gate_profile,
 )
 from .workspace import write_json, write_jsonl
 
@@ -32,6 +38,8 @@ from .workspace import write_json, write_jsonl
 class SubmissionValidationResult:
     path: str
     status: str
+    gate_profile: str
+    workflow_requirements: dict[str, bool]
     ready_for_submission: bool
     reviewed_axis_count: int
     required_axis_count: int
@@ -45,10 +53,45 @@ class SubmissionValidationResult:
         return asdict(self)
 
 
-def build_manual_review_queue() -> list[dict[str, Any]]:
+def profile_requires(profile: str, key: str) -> bool:
+    return bool(gate_profile_definition(profile).get(key))
+
+
+def required_axis_ids(profile: str) -> set[str]:
+    definition = gate_profile_definition(profile)
+    return {str(axis) for axis in definition.get("required_axes", [])}
+
+
+def build_manual_review_queue(gate_profile: str = GATE_PROFILE_DELIVERY) -> list[dict[str, Any]]:
+    profile = normalize_gate_profile(gate_profile)
     rows: list[dict[str, Any]] = []
+    required_axes = required_axis_ids(profile)
+    require_primary = profile_requires(profile, "require_primary_passes")
+    require_blind = profile_requires(profile, "require_blind_reviews")
+    require_total = profile_requires(profile, "require_total_report")
+    require_adversarial = profile_requires(profile, "require_adversarial_passes")
+    if not require_primary:
+        for axis in REVIEW_AXES:
+            if axis["axis"] not in required_axes:
+                continue
+            rows.append(
+                {
+                    "task_id": f"profile-axis-{axis['axis']}",
+                    "phase": "profile_axis_review",
+                    "lane": "profile",
+                    "pass": "single",
+                    "axis": axis["axis"],
+                    "label": axis["label"],
+                    "status": "pending",
+                    "gate_profile": profile,
+                    "required_for_gate": True,
+                    "artifact_path": "evidence/submission/manual_review_submission.json",
+                    "required_evidence": "checked_axes[].status=checked and checked_axes[].notes for this profile axis",
+                }
+            )
     for pass_name in PASS_NAMES:
         for axis in REVIEW_AXES:
+            required_for_gate = require_primary and axis["axis"] in required_axes
             rows.append(
                 {
                     "task_id": f"{pass_name}-{axis['axis']}",
@@ -57,7 +100,9 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
                     "pass": pass_name,
                     "axis": axis["axis"],
                     "label": axis["label"],
-                    "status": "pending",
+                    "status": "pending" if required_for_gate else "skipped",
+                    "gate_profile": profile,
+                    "required_for_gate": required_for_gate,
                     "artifact_path": f"llm-facing/consistency_rounds/primary_{pass_name}.md",
                     "required_evidence": (
                         "episode/line/evidence/rationale/counter_evidence/"
@@ -76,7 +121,9 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
                     "pass": pass_name,
                     "axis": "all_axes",
                     "label": "블라인드 전 회차 정합성/맥락 장부 + 충돌 후보",
-                    "status": "pending",
+                    "status": "pending" if require_blind else "skipped",
+                    "gate_profile": profile,
+                    "required_for_gate": require_blind,
                     "artifact_path": f"llm-facing/blind_reviews/{reviewer}_{pass_name}.md",
                     "required_evidence": (
                         "blind reviewer must not read other lanes; include context ledger, "
@@ -92,7 +139,9 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
             "pass": "synthesis",
             "axis": "all_axes",
             "label": "블라인드 결과 통합 total 리포트",
-            "status": "pending",
+            "status": "pending" if require_total else "skipped",
+            "gate_profile": profile,
+            "required_for_gate": require_total,
             "artifact_path": "llm-facing/total_consistency_report.md",
             "required_evidence": (
                 "merge primary and blind lanes; separate confirmed, deferred, author decision, "
@@ -109,7 +158,9 @@ def build_manual_review_queue() -> list[dict[str, Any]]:
                 "pass": pass_name,
                 "axis": "all_axes",
                 "label": "통합 리포트 이후 적대적 감리",
-                "status": "pending",
+                "status": "pending" if require_adversarial else "skipped",
+                "gate_profile": profile,
+                "required_for_gate": require_adversarial,
                 "artifact_path": "llm-facing/adversarial_audit_3pass.md",
                 "required_evidence": (
                     "attack total report; downgrade defended items; enforce hard carryover; "
@@ -128,8 +179,14 @@ def build_pass_map() -> dict[str, dict[str, Any]]:
     return {pass_name: empty_pass_result() for pass_name in PASS_NAMES}
 
 
-def build_review_protocol() -> dict[str, Any]:
+def build_review_protocol(gate_profile: str = GATE_PROFILE_DELIVERY) -> dict[str, Any]:
+    profile = normalize_gate_profile(gate_profile)
     return {
+        "authority_layers": list(AUTHORITY_LAYERS),
+        "active_gate_profile": profile,
+        "gate_profile": gate_profile_definition(profile),
+        "gate_profile_order": list(GATE_PROFILE_ORDER),
+        "gate_profiles": GATE_PROFILE_DEFINITIONS,
         "consistency_check_unit_id": CONSISTENCY_CHECK_UNIT_ID,
         "consistency_check_unit_summary": CONSISTENCY_CHECK_UNIT_SUMMARY,
         "consistency_repetition_rule": CONSISTENCY_REPETITION_RULE,
@@ -169,13 +226,15 @@ def build_blind_reviews() -> dict[str, dict[str, Any]]:
     }
 
 
-def build_empty_manual_review_submission() -> dict[str, Any]:
+def build_empty_manual_review_submission(gate_profile: str = GATE_PROFILE_DELIVERY) -> dict[str, Any]:
+    profile = normalize_gate_profile(gate_profile)
     return {
         "schema_version": "manual_review_submission.v1",
         "status": "pending",
+        "gate_profile": profile,
         "reviewer": "",
         "reviewed_at": "",
-        "review_protocol": build_review_protocol(),
+        "review_protocol": build_review_protocol(profile),
         "consistency_repetition_contract": build_consistency_repetition_contract(),
         "checked_axes": [
             {"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""}
@@ -196,39 +255,61 @@ def build_empty_manual_review_submission() -> dict[str, Any]:
     }
 
 
-def write_manual_review_scaffold(submission_dir: Path) -> dict[str, Path]:
+def write_manual_review_scaffold(
+    submission_dir: Path,
+    *,
+    gate_profile: str = GATE_PROFILE_DELIVERY,
+) -> dict[str, Path]:
+    profile = normalize_gate_profile(gate_profile)
     submission_dir.mkdir(parents=True, exist_ok=True)
     queue_path = submission_dir / "manual_review_queue.jsonl"
     submission_path = submission_dir / "manual_review_submission.json"
-    write_jsonl(queue_path, build_manual_review_queue())
+    write_jsonl(queue_path, build_manual_review_queue(profile))
     if not submission_path.exists():
-        write_json(submission_path, build_empty_manual_review_submission())
+        write_json(submission_path, build_empty_manual_review_submission(profile))
     else:
-        merge_missing_review_axes(submission_path)
+        merge_missing_review_axes(submission_path, gate_profile=profile)
     return {"queue_path": queue_path, "submission_path": submission_path}
 
 
-def merge_missing_review_axes(submission_path: Path) -> None:
+def merge_missing_review_axes(
+    submission_path: Path,
+    *,
+    gate_profile: str = GATE_PROFILE_DELIVERY,
+) -> None:
     try:
         payload = json.loads(submission_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return
-    changed = merge_missing_submission_contract(payload)
+    changed = merge_missing_submission_contract(payload, gate_profile=gate_profile)
     if changed:
         write_json(submission_path, payload)
 
 
-def merge_missing_submission_contract(payload: dict[str, Any]) -> bool:
+def merge_missing_submission_contract(
+    payload: dict[str, Any],
+    *,
+    gate_profile: str = GATE_PROFILE_DELIVERY,
+) -> bool:
     changed = False
+    profile = normalize_gate_profile(payload.get("gate_profile") or gate_profile)
+    if payload.get("gate_profile") != profile:
+        payload["gate_profile"] = profile
+        changed = True
     if not isinstance(payload.get("review_protocol"), dict):
-        payload["review_protocol"] = build_review_protocol()
+        payload["review_protocol"] = build_review_protocol(profile)
         changed = True
     else:
         protocol = payload["review_protocol"]
-        for key, default in build_review_protocol().items():
+        defaults = build_review_protocol(profile)
+        for key, default in defaults.items():
             if key not in protocol:
                 protocol[key] = default
                 changed = True
+        if protocol.get("active_gate_profile") != profile:
+            protocol["active_gate_profile"] = profile
+            protocol["gate_profile"] = gate_profile_definition(profile)
+            changed = True
     if not isinstance(payload.get("consistency_repetition_contract"), dict):
         payload["consistency_repetition_contract"] = build_consistency_repetition_contract()
         changed = True
@@ -325,6 +406,17 @@ def merge_missing_passes(pass_map: dict[str, Any]) -> bool:
 def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
     payload = json.loads(path.read_text(encoding="utf-8"))
     issues: list[dict[str, Any]] = []
+    protocol = payload.get("review_protocol")
+    protocol_profile = ""
+    if isinstance(protocol, dict):
+        protocol_profile = str(protocol.get("active_gate_profile") or "")
+    profile = normalize_gate_profile(payload.get("gate_profile") or protocol_profile)
+    require_primary = profile_requires(profile, "require_primary_passes")
+    require_blind = profile_requires(profile, "require_blind_reviews")
+    require_total = profile_requires(profile, "require_total_report")
+    require_adversarial = profile_requires(profile, "require_adversarial_passes")
+    require_repetition = profile_requires(profile, "require_consistency_repetition")
+    require_delivery_report = profile_requires(profile, "require_delivery_report")
 
     checked_axes = payload.get("checked_axes")
     if not isinstance(checked_axes, list):
@@ -332,8 +424,10 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         issues.append({"field": "checked_axes", "message": "must be an array"})
 
     reviewed_axis_count = 0
+    reviewed_required_axis_count = 0
     seen_axes: set[str] = set()
     required_axes = {item["axis"] for item in REVIEW_AXES}
+    profile_required_axes = required_axis_ids(profile)
     for index, item in enumerate(checked_axes, start=1):
         if not isinstance(item, dict):
             issues.append({"field": f"checked_axes[{index}]", "message": "must be an object"})
@@ -344,6 +438,8 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
         notes = str(item.get("notes") or "").strip()
         if status == "checked":
             reviewed_axis_count += 1
+            if axis in profile_required_axes:
+                reviewed_required_axis_count += 1
             if not notes:
                 issues.append({"field": f"checked_axes[{index}].notes", "message": "checked axis requires notes"})
         if status == "skipped" and not notes:
@@ -356,31 +452,41 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
 
     is_complete = payload.get("status") == "complete"
 
-    required_pass_count = len(PASS_NAMES) * (2 + len(BLIND_REVIEWERS))
+    required_pass_count = 0
+    if require_primary:
+        required_pass_count += len(PASS_NAMES)
+    if require_blind:
+        required_pass_count += len(PASS_NAMES) * len(BLIND_REVIEWERS)
+    if require_adversarial:
+        required_pass_count += len(PASS_NAMES)
     completed_pass_count = validate_pass_map_status(
         payload.get("passes"),
         "passes",
         issues,
-        require_present=True,
-        require_complete=is_complete,
+        require_present=require_primary,
+        require_complete=is_complete and require_primary,
     )
-    completed_pass_count += validate_blind_reviews(payload.get("blind_reviews"), issues, require_complete=is_complete)
+    completed_pass_count += validate_blind_reviews(
+        payload.get("blind_reviews"),
+        issues,
+        require_complete=is_complete and require_blind,
+    )
     completed_pass_count += validate_pass_map_status(
         payload.get("adversarial_passes"),
         "adversarial_passes",
         issues,
-        require_present=is_complete,
-        require_complete=is_complete,
+        require_present=require_adversarial,
+        require_complete=is_complete and require_adversarial,
     )
     total_report_ready = validate_total_consistency_report(
         payload.get("total_consistency_report"),
         issues,
-        require_complete=is_complete,
+        require_complete=is_complete and require_total,
     )
     repetition_ready = validate_consistency_repetition_contract(
         payload.get("consistency_repetition_contract"),
         issues,
-        require_complete=is_complete,
+        require_complete=is_complete and require_repetition,
     )
 
     findings = payload.get("findings", [])
@@ -400,23 +506,29 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
             issues.extend(validate_complete_finding_contract(finding, index))
             issues.extend(validate_finding_confidence_contract(finding, index))
 
-    if is_complete and reviewed_axis_count < len(REVIEW_AXES):
-        issues.append({"field": "checked_axes", "message": "complete submission requires all review axes checked"})
-    if is_complete and not total_report_ready:
+    if is_complete and reviewed_required_axis_count < len(profile_required_axes):
+        issues.append(
+            {
+                "field": "checked_axes",
+                "message": f"complete {profile} submission requires profile axes checked",
+                "required_axes": sorted(profile_required_axes),
+            }
+        )
+    if is_complete and require_total and not total_report_ready:
         issues.append({"field": "total_consistency_report", "message": "complete submission requires completed total report"})
     if is_complete and completed_pass_count < required_pass_count:
         issues.append(
             {
                 "field": "passes",
-                "message": "complete submission requires primary 3-pass, 3 blind lanes x 3-pass, and adversarial 3-pass",
+                "message": f"complete {profile} submission requires required gate workflow passes",
             }
         )
 
     ready = (
         payload.get("status") == "complete"
-        and reviewed_axis_count >= len(REVIEW_AXES)
+        and reviewed_required_axis_count >= len(profile_required_axes)
         and completed_pass_count >= required_pass_count
-        and total_report_ready
+        and (total_report_ready or not require_total)
         and repetition_ready
         and bool(str(payload.get("final_summary") or "").strip())
         and not issues
@@ -426,9 +538,18 @@ def validate_manual_review_submission(path: Path) -> SubmissionValidationResult:
     return SubmissionValidationResult(
         path=str(path),
         status=str(payload.get("status") or "pending"),
+        gate_profile=profile,
+        workflow_requirements={
+            "require_primary_passes": require_primary,
+            "require_blind_reviews": require_blind,
+            "require_total_report": require_total,
+            "require_adversarial_passes": require_adversarial,
+            "require_consistency_repetition": require_repetition,
+            "require_delivery_report": require_delivery_report,
+        },
         ready_for_submission=ready,
         reviewed_axis_count=reviewed_axis_count,
-        required_axis_count=len(REVIEW_AXES),
+        required_axis_count=len(profile_required_axes),
         completed_pass_count=completed_pass_count,
         required_pass_count=required_pass_count,
         finding_count=len(findings),
@@ -918,34 +1039,43 @@ def write_submission_validation_result(result: SubmissionValidationResult, outpu
 
 def workflow_blockers_from_validation(validation: dict[str, Any]) -> list[str]:
     blockers: set[str] = set()
+    requirements = validation.get("workflow_requirements")
+    if not isinstance(requirements, dict):
+        requirements = {
+            "require_primary_passes": True,
+            "require_blind_reviews": True,
+            "require_total_report": True,
+            "require_adversarial_passes": True,
+            "require_consistency_repetition": True,
+        }
     if int(validation.get("reviewed_axis_count") or 0) < int(validation.get("required_axis_count") or 0):
         blockers.add("manual_review_axes_not_complete")
     if int(validation.get("completed_pass_count") or 0) < int(validation.get("required_pass_count") or 0):
-        blockers.update(
-            {
-                "primary_consistency_passes_not_complete",
-                "blind_reviews_not_complete",
-                "adversarial_3pass_not_complete",
-            }
-        )
-    if validation.get("status") != "complete" or int(validation.get("completed_pass_count") or 0) < int(
-        validation.get("required_pass_count") or 0
+        if requirements.get("require_primary_passes"):
+            blockers.add("primary_consistency_passes_not_complete")
+        if requirements.get("require_blind_reviews"):
+            blockers.add("blind_reviews_not_complete")
+        if requirements.get("require_adversarial_passes"):
+            blockers.add("adversarial_3pass_not_complete")
+    if requirements.get("require_total_report") and (
+        validation.get("status") != "complete"
+        or int(validation.get("completed_pass_count") or 0) < int(validation.get("required_pass_count") or 0)
     ):
         blockers.add("total_consistency_report_not_complete")
     for issue in validation.get("issues", []):
         if not isinstance(issue, dict):
             continue
         field = str(issue.get("field") or "")
-        if field.startswith("blind_reviews."):
+        if field.startswith("blind_reviews.") and requirements.get("require_blind_reviews"):
             blockers.add("blind_reviews_not_complete")
-        elif field.startswith("total_consistency_report"):
+        elif field.startswith("total_consistency_report") and requirements.get("require_total_report"):
             blockers.add("total_consistency_report_not_complete")
-        elif field.startswith("adversarial_passes."):
+        elif field.startswith("adversarial_passes.") and requirements.get("require_adversarial_passes"):
             blockers.add("adversarial_3pass_not_complete")
-        elif field.startswith("passes"):
+        elif field.startswith("passes") and requirements.get("require_primary_passes"):
             blockers.add("primary_consistency_passes_not_complete")
         elif field.startswith("checked_axes"):
             blockers.add("manual_review_axes_not_complete")
-        elif field.startswith("consistency_repetition_contract"):
+        elif field.startswith("consistency_repetition_contract") and requirements.get("require_consistency_repetition"):
             blockers.add("consistency_repetitions_not_complete")
     return sorted(blockers)
