@@ -133,9 +133,10 @@ Pass 3: AI 티/문체
 
 ## 6. export
 
-최종 승인 후 기본 납품 산출물은 TXT 원고와 human-facing HTML 보고서입니다.
+최종 승인 후 기본 납품 산출물은 TXT 원고와 human-facing HTML 보고서입니다. 최종 보고서는 기본 `closing_full` 누적 마감 보고서이며, 정책 판정, glossary SSOT, AI-slop 표면, hold/watchlist 분리, 검증/재봉인 상태를 함께 표시합니다.
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 scan-ai-slop --input "workspace\{work}\runs\{run_id}\final_manuscript\final_manuscript.txt" --output "workspace\{work}\runs\{run_id}\consistency_integrity\ai_slop_scan.jsonl"
 .\scripts\novel-qc-loop.ps1 render-final-delivery --run-root "workspace\{work}\runs\{run_id}" --version v1
 ```
 

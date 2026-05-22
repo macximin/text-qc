@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from .analyze import analyze_run
+from .ai_slop import scan_ai_slop_file
 from .corrections import (
     apply_changes_to_text_file,
     render_change_contexts,
     validate_changes_file,
     write_validation_result,
 )
-from .delivery import build_final_delivery_package
+from .delivery import DEFAULT_REPORT_DENSITY, REPORT_DENSITY_CHOICES, build_final_delivery_package
 from .hwpx_review import render_marked_manuscript_hwpx, render_marked_manuscript_md
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
@@ -150,6 +151,17 @@ def cmd_render_qc_html(args: argparse.Namespace) -> int:
     else:
         output_path = paths[0].with_suffix(".html")
     result = render_qc_html(paths=paths, output_path=output_path, title=args.title)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_scan_ai_slop(args: argparse.Namespace) -> int:
+    output_path = Path(args.output).resolve() if args.output else None
+    result = scan_ai_slop_file(
+        Path(args.input).resolve(),
+        output_path=output_path,
+        max_examples_per_type=args.max_examples_per_type,
+    )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -586,6 +598,7 @@ def cmd_render_final_delivery(args: argparse.Namespace) -> int:
         scan_manifest_path=Path(args.scan_manifest).resolve() if args.scan_manifest else None,
         title=args.title,
         work_label=args.work_label,
+        report_density=args.report_density,
         update_run_manifest=not args.no_manifest_update,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
@@ -977,6 +990,15 @@ def build_parser() -> argparse.ArgumentParser:
     normalize_typography.add_argument("--output")
     normalize_typography.set_defaults(func=cmd_normalize_typography)
 
+    scan_ai_slop = subparsers.add_parser(
+        "scan-ai-slop",
+        help="scan plain text for metadata, parenthetical gloss, placeholder, and memo-like AI-slop surfaces",
+    )
+    scan_ai_slop.add_argument("--input", required=True)
+    scan_ai_slop.add_argument("--output", help="optional JSONL examples output path")
+    scan_ai_slop.add_argument("--max-examples-per-type", type=int, default=5)
+    scan_ai_slop.set_defaults(func=cmd_scan_ai_slop)
+
     validate_changes = subparsers.add_parser("validate-changes", help="validate correction changes JSON")
     validate_changes.add_argument("--changes", required=True)
     validate_changes.add_argument("--output")
@@ -1122,6 +1144,12 @@ def build_parser() -> argparse.ArgumentParser:
     final_delivery.add_argument("--scan-manifest", help="final scan manifest; default: latest consistency_integrity manifest")
     final_delivery.add_argument("--title", default="")
     final_delivery.add_argument("--work-label", default="")
+    final_delivery.add_argument(
+        "--report-density",
+        choices=sorted(REPORT_DENSITY_CHOICES),
+        default=DEFAULT_REPORT_DENSITY,
+        help="human-facing report density; final delivery defaults to cumulative closing_full",
+    )
     final_delivery.add_argument("--no-manifest-update", action="store_true")
     final_delivery.set_defaults(func=cmd_render_final_delivery)
 

@@ -14,12 +14,17 @@ ALLOWED_QC_STATUSES = {
     "accepted_direct",
     "contextual_canon",
     "canon_hold",
+    "blocking_hold",
+    "policy_watchlist",
+    "style_watchlist",
     "ledger_needed",
     "policy_choice",
     "genre_allowed",
     "blocked",
     "needs_human",
     "style_only",
+    "reseal_required",
+    "sealed",
     "rejected",
 }
 
@@ -184,7 +189,9 @@ def build_qc_html(rows: list[dict[str, Any]], *, title: str) -> str:
     th {{ background: #f3f4f6; position: sticky; top: 0; }}
     code {{ white-space: pre-wrap; }}
     .status-confirmed_error, .status-confirmed_internal_marker, .status-accepted_direct {{ background: #ecfdf5; }}
-    .status-canon_hold, .status-ledger_needed, .status-policy_choice, .status-blocked, .status-needs_human {{ background: #fff7ed; }}
+    .status-sealed {{ background: #ecfdf5; }}
+    .status-blocking_hold, .status-blocked, .status-reseal_required {{ background: #fef2f2; }}
+    .status-canon_hold, .status-ledger_needed, .status-policy_choice, .status-policy_watchlist, .status-style_watchlist, .status-needs_human {{ background: #fff7ed; }}
   </style>
 </head>
 <body>

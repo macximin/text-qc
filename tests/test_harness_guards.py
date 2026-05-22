@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from novel_qc_loop.analyze import contextual_typo_rows_for_line, enrich_fact_row  # noqa: E402
+from novel_qc_loop.ai_slop import scan_ai_slop_text  # noqa: E402
 from novel_qc_loop.corrections import apply_changes_to_text_file, validate_change_item  # noqa: E402
 from novel_qc_loop.delivery import build_final_delivery_package  # noqa: E402
 from novel_qc_loop.hwpx_review import render_marked_manuscript_md  # noqa: E402
@@ -121,14 +122,174 @@ class HarnessGuardTests(unittest.TestCase):
             self.assertEqual(".html", report_output.suffix)
             self.assertEqual(manuscript, manuscript_output.read_text(encoding="utf-8"))
             report_text = report_output.read_text(encoding="utf-8")
-            self.assertIn("<h2>요약</h2>", report_text)
-            self.assertIn("<h2>최종 산출물</h2>", report_text)
-            self.assertIn("<h2>무엇을 확인했나</h2>", report_text)
+            self.assertIn("전체 누적 최종 마감 보고서", report_text)
+            self.assertIn("<h2>1. 요약</h2>", report_text)
+            self.assertIn("<h2>2. 최종 산출물</h2>", report_text)
+            self.assertIn("<h2>6. 정책 판정 상세</h2>", report_text)
+            self.assertIn("<h2>8. AI-slop 전역 스캔</h2>", report_text)
             delivery_manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
             self.assertEqual("txt", delivery_manifest["default_manuscript_format"])
             self.assertEqual("html", delivery_manifest["default_report_format"])
+            self.assertEqual("closing_full", delivery_manifest["report_density"])
+            self.assertEqual("cumulative_final_closing_report", delivery_manifest["report_scope"])
+            self.assertTrue(delivery_manifest["current_package_sealed"])
             updated_run_manifest = json.loads((run_root / "run_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual("done", updated_run_manifest["final_delivery_status"])
+            self.assertEqual("closing_full", updated_run_manifest["final_delivery_report_density"])
+
+    def test_ai_slop_scanner_flags_meta_parenthetical_and_placeholders(self) -> None:
+        text = "\n".join(
+            [
+                "ⓚ제80화",
+                "(제 80화 끝)",
+                "KD전자(구 한성전자)가 회의실에 걸려 있었다.",
+                "Crazy Koreans(미친 한국인들)라는 말은 너무 주석 같다.",
+                "A사는 TODO 메모를 남겼다.",
+            ]
+        )
+
+        result = scan_ai_slop_text(text).to_dict()
+
+        self.assertGreater(result["counts"]["chapter_end_meta"], 0)
+        self.assertGreater(result["counts"]["legacy_name_parenthetical"], 0)
+        self.assertGreater(result["counts"]["english_parenthetical_gloss"], 0)
+        self.assertGreater(result["counts"]["placeholder_surface"], 0)
+        self.assertGreater(result["counts"]["internal_memo_surface"], 0)
+
+    def test_final_delivery_splits_policy_watchlist_from_blocking_holds(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-hold-split-") as temp_dir:
+            run_root = Path(temp_dir)
+            final_dir = run_root / "final_manuscript"
+            final_dir.mkdir(parents=True)
+            manuscript = "ⓚ제1화\n본문.\n"
+            final_path = final_dir / "final_manuscript.txt"
+            source_path = run_root / "source.txt"
+            final_path.write_text(manuscript, encoding="utf-8")
+            source_path.write_text(manuscript, encoding="utf-8")
+            scan_manifest = run_root / "scan_manifest.json"
+            scan_manifest.write_text(
+                json.dumps(
+                    {
+                        "scan_status": "clean",
+                        "active_hold_count": 2,
+                        "hold_items_untouched": [
+                            "policy_choice / 소로스 실명은 유명 실존인물이라 보존",
+                            "name_policy / 모델명 보존은 독자-facing 정책 watchlist",
+                        ],
+                        "validation_total": 1,
+                        "validation_valid": 1,
+                        "validation_invalid": 0,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (run_root / "run_manifest.json").write_text(
+                json.dumps(
+                    {"source_text_path": str(source_path), "final_manuscript_path": str(final_path)},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_final_delivery_package(
+                run_root=run_root,
+                version="vhold",
+                scan_manifest_path=scan_manifest,
+            )
+
+            delivery_manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+            self.assertEqual(0, delivery_manifest["blocking_hold_count"])
+            self.assertEqual(2, delivery_manifest["policy_watchlist_count"])
+            self.assertIn("policy_watchlist", Path(result.human_report_html_path).read_text(encoding="utf-8"))
+
+    def test_final_delivery_marks_previous_package_stale_when_hash_changes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-reseal-") as temp_dir:
+            run_root = Path(temp_dir)
+            final_dir = run_root / "final_manuscript"
+            final_dir.mkdir(parents=True)
+            final_path = final_dir / "final_manuscript.txt"
+            source_path = run_root / "source.txt"
+            previous_manifest = run_root / "final_delivery" / "vold_final_approved_package" / "delivery_manifest.json"
+            previous_manifest.parent.mkdir(parents=True)
+            previous_manifest.write_text(
+                json.dumps({"delivery_txt_sha256": "OLD", "created_at": "2026-01-01T00:00:00+00:00"}),
+                encoding="utf-8",
+            )
+            manuscript = "ⓚ제1화\n새 본문.\n"
+            final_path.write_text(manuscript, encoding="utf-8")
+            source_path.write_text(manuscript, encoding="utf-8")
+            (run_root / "run_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "source_text_path": str(source_path),
+                        "final_manuscript_path": str(final_path),
+                        "final_delivery_manifest_path": str(previous_manifest),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_final_delivery_package(run_root=run_root, version="vnew")
+
+            delivery_manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+            self.assertTrue(delivery_manifest["previous_delivery_stale"])
+            self.assertTrue(delivery_manifest["current_package_sealed"])
+
+    def test_glossary_summary_is_rendered_in_closing_full_report(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-glossary-") as temp_dir:
+            run_root = Path(temp_dir)
+            final_dir = run_root / "final_manuscript"
+            final_dir.mkdir(parents=True)
+            final_path = final_dir / "final_manuscript.txt"
+            source_path = run_root / "source.txt"
+            manuscript = "ⓚ제1화\nSY텔레콤이 움직였다.\n"
+            final_path.write_text(manuscript, encoding="utf-8")
+            source_path.write_text(manuscript, encoding="utf-8")
+            glossary_path = run_root / "consistency_integrity" / "v1" / "glossary_current.jsonl"
+            glossary_path.parent.mkdir(parents=True)
+            glossary_path.write_text(
+                json.dumps(
+                    {
+                        "canonical": "SY텔레콤",
+                        "domain": "brand",
+                        "policy": "가명 정본",
+                        "aliases": ["선우텔레콤"],
+                        "forbidden_aliases": ["KS텔레콤"],
+                        "residual_forbidden_alias_counts": {"KS텔레콤": 0},
+                        "reason": "선우그룹 약칭은 SY로 통일",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            scan_manifest = run_root / "scan_manifest.json"
+            scan_manifest.write_text(
+                json.dumps(
+                    {"scan_status": "clean", "active_hold_count": 0, "glossary_current_path": str(glossary_path)},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (run_root / "run_manifest.json").write_text(
+                json.dumps(
+                    {"source_text_path": str(source_path), "final_manuscript_path": str(final_path)},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_final_delivery_package(
+                run_root=run_root,
+                version="vglossary",
+                scan_manifest_path=scan_manifest,
+            )
+
+            report_text = Path(result.human_report_html_path).read_text(encoding="utf-8")
+            self.assertIn("SY텔레콤", report_text)
+            self.assertIn("가명 정본", report_text)
 
     def test_lightweight_qc_jsonl_validates_and_renders_html(self) -> None:
         with tempfile.TemporaryDirectory(prefix="novel-qc-jsonl-") as temp_dir:

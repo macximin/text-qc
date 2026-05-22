@@ -75,6 +75,9 @@ Gate profile: `{{gate_profile}}` / `{{gate_profile_label}}`
 - 독자-facing하지 않은 내부 메모, 정본 선택 보류, 작가 확인용 질문도 삭제하지 말고 내부 장부에 남긴다.
 - 최종 원고 후보는 `final_manuscript/final_manuscript.txt`에 둔다.
 - 최종 승인 패키지는 `render-final-delivery`로 만든다. 기본 납품 원고는 TXT, 기본 human-facing 보고서는 HTML이다.
+- 최종 보고서 기본 밀도는 `closing_full`이다. 요약만 던지지 말고 정책 판정, glossary SSOT, AI-slop 표면, hold/watchlist 분리, 검증/재봉인 상태를 누적 마감 보고서로 쓴다.
+- hold는 `blocking_hold`, `policy_watchlist`, `style_watchlist`로 분리한다. 실명/가명 정책 잔여나 보존 판단은 출고 차단이 아니면 watchlist에 둔다.
+- 최종 패키징 전후로 `scan-ai-slop`을 사용해 `(제 80화 끝)`, `KD전자(구 한성전자)`, 영어 뒤 괄호 번역, A사/XX년 placeholder, 내부 메모형 표면을 확인한다.
 
 ## 전역 컨텍스트 스캔 우선
 
@@ -148,7 +151,8 @@ HWP 계열, AI 작성 의심, glossary 미정렬, 중복/화수 이상 가능성
 8. 표면 교정 루프
 9. `human-facing/1차_one_page_report.md`와 최종 개선 보고서
 10. 최종 원고 후보
-11. `render-final-delivery`로 TXT 원고와 HTML 최종 보고서 패키징
+11. `scan-ai-slop`으로 메타/괄호 주석/placeholder/내부 메모형 표면 최종 확인
+12. `render-final-delivery --report-density closing_full`로 TXT 원고와 HTML 누적 마감 보고서 패키징
 
 위 1-4번이 1개 `consistency_3x3_unit`입니다. 사용자가 "정합성 검사 3번"이라고 말하면 1-4번을 세 번 수행하고, `manual_review_submission.json`의 `consistency_repetition_contract.requested_unit_count`를 3으로 둡니다.
 

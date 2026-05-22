@@ -18,9 +18,10 @@ intake 직후에는 추출 원고가 그대로 복사되어 있습니다. 검수
 
 검토용 diff는 `corrections/editorial_diff.md`에 생성됩니다.
 
-최종 승인 후 기본 납품 산출물은 TXT 원고와 human-facing HTML 보고서입니다. HWP/HWPX/PDF는 별도 요청이 있을 때만 추가 export로 생성합니다.
+최종 승인 후 기본 납품 산출물은 TXT 원고와 human-facing HTML 보고서입니다. HWP/HWPX/PDF는 별도 요청이 있을 때만 추가 export로 생성합니다. 최종 보고서는 기본적으로 `closing_full` 누적 마감 보고서이며, 정책 판정, glossary SSOT, AI-slop 표면, hold/watchlist 분리, 검증/재봉인 상태를 포함합니다.
 
 ```powershell
+.\scripts\novel-qc-loop.ps1 scan-ai-slop --input "{{run_root}}\final_manuscript\final_manuscript.txt" --output "{{run_root}}\consistency_integrity\ai_slop_scan.jsonl"
 .\scripts\novel-qc-loop.ps1 render-final-delivery --run-root "{{run_root}}" --version v1
 ```
 
