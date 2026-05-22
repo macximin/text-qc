@@ -21,12 +21,14 @@ from .protocol import (
     GATE_PROFILE_DEFINITIONS,
     GATE_PROFILE_DELIVERY,
     GATE_PROFILE_ORDER,
+    GLOBAL_CONTEXT_SCAN_RULE,
     NTH_REPORT_CUMULATIVE_RULE,
     NTH_REPORT_VISIBLE_PRIORITIES,
     PASS_NAMES,
     PREMISE_POLICY_SUMMARY,
     REPAIRABILITY_VALUES,
     REVIEW_AXES,
+    SOURCE_RISK_CHECKLIST,
     TOTAL_CONSISTENCY_REPORT_NAME,
     gate_profile_definition,
     normalize_gate_profile,
@@ -70,6 +72,22 @@ def build_manual_review_queue(gate_profile: str = GATE_PROFILE_DELIVERY) -> list
     require_blind = profile_requires(profile, "require_blind_reviews")
     require_total = profile_requires(profile, "require_total_report")
     require_adversarial = profile_requires(profile, "require_adversarial_passes")
+    for item in SOURCE_RISK_CHECKLIST:
+        rows.append(
+            {
+                "task_id": f"source-preflight-{item['risk_id']}",
+                "phase": "source_preflight",
+                "lane": "source",
+                "pass": "preflight",
+                "axis": item["risk_id"],
+                "label": item["label"],
+                "status": "pending",
+                "gate_profile": profile,
+                "required_for_gate": True,
+                "artifact_path": "evidence/submission/manual_review_submission.json",
+                "required_evidence": item["rule"],
+            }
+        )
     if not require_primary:
         for axis in REVIEW_AXES:
             if axis["axis"] not in required_axes:
@@ -202,6 +220,8 @@ def build_review_protocol(gate_profile: str = GATE_PROFILE_DELIVERY) -> dict[str
         "author_intent_protection_rule": AUTHOR_INTENT_PROTECTION_RULE,
         "ai_generated_text_continuity_rule": AI_GENERATED_TEXT_CONTINUITY_RULE,
         "canonical_name_alias_rule": CANONICAL_NAME_ALIAS_RULE,
+        "source_risk_checklist": list(SOURCE_RISK_CHECKLIST),
+        "global_context_scan_rule": GLOBAL_CONTEXT_SCAN_RULE,
         "excluded_review_scopes": list(EXCLUDED_REVIEW_SCOPES),
         "repairability_values": list(REPAIRABILITY_VALUES),
         "disposition_values": list(DISPOSITION_VALUES),
@@ -239,6 +259,16 @@ def build_empty_manual_review_submission(gate_profile: str = GATE_PROFILE_DELIVE
         "checked_axes": [
             {"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""}
             for item in REVIEW_AXES
+        ],
+        "source_risk_checklist": [
+            {
+                "risk_id": item["risk_id"],
+                "label": item["label"],
+                "status": "pending",
+                "notes": "",
+                "rule": item["rule"],
+            }
+            for item in SOURCE_RISK_CHECKLIST
         ],
         "passes": build_pass_map(),
         "blind_reviews": build_blind_reviews(),
@@ -332,6 +362,35 @@ def merge_missing_submission_contract(
             if item["axis"] in seen:
                 continue
             checked_axes.append({"axis": item["axis"], "label": item["label"], "status": "pending", "notes": ""})
+            changed = True
+
+    source_risks = payload.get("source_risk_checklist")
+    if not isinstance(source_risks, list):
+        payload["source_risk_checklist"] = [
+            {
+                "risk_id": item["risk_id"],
+                "label": item["label"],
+                "status": "pending",
+                "notes": "",
+                "rule": item["rule"],
+            }
+            for item in SOURCE_RISK_CHECKLIST
+        ]
+        changed = True
+    else:
+        seen_risks = {str(item.get("risk_id") or "") for item in source_risks if isinstance(item, dict)}
+        for item in SOURCE_RISK_CHECKLIST:
+            if item["risk_id"] in seen_risks:
+                continue
+            source_risks.append(
+                {
+                    "risk_id": item["risk_id"],
+                    "label": item["label"],
+                    "status": "pending",
+                    "notes": "",
+                    "rule": item["rule"],
+                }
+            )
             changed = True
 
     if not isinstance(payload.get("passes"), dict):

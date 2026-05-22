@@ -12,12 +12,19 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from novel_qc_loop.analyze import contextual_typo_rows_for_line, enrich_fact_row  # noqa: E402
 from novel_qc_loop.corrections import apply_changes_to_text_file, validate_change_item  # noqa: E402
+from novel_qc_loop.delivery import build_final_delivery_package  # noqa: E402
 from novel_qc_loop.hwpx_review import render_marked_manuscript_md  # noqa: E402
+from novel_qc_loop.qc import render_qc_html, validate_qc_jsonl_files  # noqa: E402
 from novel_qc_loop.reports import (  # noqa: E402
     validate_claim_evidence_tables,
     validate_final_improvement_report_shape,
 )
 from novel_qc_loop.cli import resolve_one_page_report_path  # noqa: E402
+from novel_qc_loop.source_integrity import (  # noqa: E402
+    build_sequence_rows,
+    detect_blocked_source_issues,
+    split_embedded_tail_episode_labels,
+)
 from novel_qc_loop.protocol import (  # noqa: E402
     AUTHOR_INTENT_PROTECTION_RULE,
     AI_GENERATED_TEXT_CONTINUITY_RULE,
@@ -43,6 +50,124 @@ from novel_qc_loop.workspace import (  # noqa: E402
 
 
 class HarnessGuardTests(unittest.TestCase):
+    def test_final_delivery_package_defaults_to_txt_and_human_html(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-final-delivery-") as temp_dir:
+            run_root = Path(temp_dir)
+            final_dir = run_root / "final_manuscript"
+            final_dir.mkdir(parents=True)
+            final_path = final_dir / "final_manuscript.txt"
+            source_path = run_root / "source.txt"
+            manuscript = "ⓚ1화\n첫 장면입니다.\n\nⓚ2화\n둘째 장면입니다.\n"
+            final_path.write_text(manuscript, encoding="utf-8")
+            source_path.write_text(manuscript, encoding="utf-8")
+            scan_dir = run_root / "consistency_integrity" / "v100_global_consistency_drift_scan"
+            scan_dir.mkdir(parents=True)
+            surface_path = scan_dir / "surface.jsonl"
+            surface_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"term": "대영증권", "count": 2}, ensure_ascii=False),
+                        json.dumps({"term": "대한증권", "count": 0}, ensure_ascii=False),
+                        json.dumps({"term": "SY텔레콤", "count": 1}, ensure_ascii=False),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            scan_manifest = scan_dir / "global_consistency_drift_scan_manifest_v100.json"
+            scan_manifest.write_text(
+                json.dumps(
+                    {
+                        "status": "done",
+                        "scan_status": "clean",
+                        "active_hold_count": 0,
+                        "source_final_raw_match": True,
+                        "surface_path": str(surface_path),
+                        "validation_total": 3,
+                        "validation_valid": 3,
+                        "validation_invalid": 0,
+                        "test_result": "24 passed",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (run_root / "run_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "work_slug": "테스트작",
+                        "source_text_path": str(source_path),
+                        "final_manuscript_path": str(final_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = build_final_delivery_package(
+                run_root=run_root,
+                version="vtest",
+                scan_manifest_path=scan_manifest,
+            )
+
+            self.assertEqual("txt", result.manuscript_format)
+            self.assertEqual("html", result.report_format)
+            self.assertTrue(result.source_final_delivery_match)
+            self.assertEqual(2, result.episode_count)
+            self.assertTrue(result.marker_sequence_clean)
+            manuscript_output = Path(result.manuscript_txt_path)
+            report_output = Path(result.human_report_html_path)
+            self.assertEqual(".txt", manuscript_output.suffix)
+            self.assertEqual(".html", report_output.suffix)
+            self.assertEqual(manuscript, manuscript_output.read_text(encoding="utf-8"))
+            report_text = report_output.read_text(encoding="utf-8")
+            self.assertIn("<h2>요약</h2>", report_text)
+            self.assertIn("<h2>최종 산출물</h2>", report_text)
+            self.assertIn("<h2>무엇을 확인했나</h2>", report_text)
+            delivery_manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+            self.assertEqual("txt", delivery_manifest["default_manuscript_format"])
+            self.assertEqual("html", delivery_manifest["default_report_format"])
+            updated_run_manifest = json.loads((run_root / "run_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("done", updated_run_manifest["final_delivery_status"])
+
+    def test_lightweight_qc_jsonl_validates_and_renders_html(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-jsonl-") as temp_dir:
+            root = Path(temp_dir)
+            ledger_path = root / "qc_ledger_EP006-015.jsonl"
+            output_path = root / "qc_review.html"
+            ledger_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "record_type": "issue",
+                                "id": "EP006-QC-001",
+                                "episode": "006",
+                                "type": "name_consistency",
+                                "status": "confirmed_error",
+                                "ssot_id": "CE-001",
+                                "source": "대한증권",
+                                "target": "대영증권",
+                                "reason": "회사명 맥락상 오기",
+                                "action": "replace",
+                                "requires_human": False,
+                            },
+                            ensure_ascii=False,
+                        )
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_qc_jsonl_files([ledger_path])
+            render_result = render_qc_html(paths=[ledger_path], output_path=output_path)
+
+            self.assertEqual(0, validation.invalid)
+            self.assertEqual(1, validation.valid)
+            self.assertEqual(1, render_result.total)
+            self.assertIn("EP006-QC-001", output_path.read_text(encoding="utf-8"))
+
     def test_k_heading_does_not_swallow_first_body_line(self) -> None:
         text = "ⓚ제1화\n완벽한 11자의 틈새.\n다음 줄\n"
         markers = find_chapter_markers(text)
@@ -54,6 +179,42 @@ class HarnessGuardTests(unittest.TestCase):
     def test_chapter_heading_spacing_is_canonicalized(self) -> None:
         self.assertEqual("ⓚ제18화", normalize_chapter_heading_line("ⓚ제 18화"))
         self.assertEqual("ⓚ제18화 소제목", normalize_chapter_heading_line("# 제 18화 - 소제목"))
+
+    def test_source_repair_splits_only_monotonic_embedded_tail_labels(self) -> None:
+        text = "\n".join(
+            [
+                "ⓚ제53화",
+                "전 회차의 마지막 문장.54화",
+                "다음 회차 첫 줄",
+                "다음 회차 마지막 문장.55화",
+                "세 번째 회차 첫 줄",
+            ]
+        )
+
+        repaired, changes = split_embedded_tail_episode_labels(
+            text,
+            document_name="sample.hwp",
+            next_id_start=1,
+        )
+
+        self.assertEqual(["053", "054", "055"], [row["base_episode"] for row in build_sequence_rows(repaired)])
+        self.assertEqual(2, len(changes))
+        self.assertNotIn("문장.54화", repaired)
+
+    def test_source_repair_blocks_slash_tail_labels_without_flagging_plain_end_labels(self) -> None:
+        text = "\n".join(
+            [
+                "ⓚ제101화",
+                "(제 101화 끝)",
+                "ⓚ제102화",
+                "(제 /102화(104화)/ 끝)",
+            ]
+        )
+
+        rows = detect_blocked_source_issues(text, next_id_start=1)
+
+        self.assertEqual(["ambiguous_tail_label"], [row["operation"] for row in rows])
+        self.assertEqual(4, rows[0]["line"])
 
     def test_numeric_gap_candidate_survives_line_break_context_loss(self) -> None:
         rows = contextual_typo_rows_for_line("019", 1, "완벽한 11자의 틈새.")

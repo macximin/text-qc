@@ -133,6 +133,14 @@ Pass 3: AI 티/문체
 
 ## 6. export
 
-필요에 따라 Markdown, HTML, PDF, HWPX를 생성합니다.
+최종 승인 후 기본 납품 산출물은 TXT 원고와 human-facing HTML 보고서입니다.
+
+```powershell
+.\scripts\novel-qc-loop.ps1 render-final-delivery --run-root "workspace\{work}\runs\{run_id}" --version v1
+```
+
+기본 출력은 `final_delivery/v1_final_approved_package/`에 생성됩니다. 패키지에는 최종 원고 TXT, 두괄식 HTML 보고서, `delivery_manifest.json`이 포함됩니다.
+
+필요에 따라 추가 Markdown, PDF, HWPX를 생성합니다.
 
 HWPX 교정 표시가 필요하면 `scripts/apply_blue.py`를 사용합니다. 편집자 모드의 기본 export는 text/Markdown diff입니다.

@@ -102,6 +102,11 @@ workspace/{work_slug}/
     final_manuscript/
       README.md
       final_manuscript.txt
+    final_delivery/
+      v1_final_approved_package/
+        *_final_approved.txt
+        *_final_human_report.html
+        delivery_manifest.json
     exports/
 ```
 
@@ -126,6 +131,8 @@ workspace/{work_slug}/
 회차별 공백 제외 글자수는 4000자 이상을 강한 원칙으로 둡니다. `inspection.json`과 `facts/chapter_metrics.jsonl`에는 기준과 회차별 충족 여부가 남고, 미달 회차는 `evidence/review/chapter_length_flags.jsonl`과 `submission_gate.json`에 blocker 후보로 남습니다.
 
 편집자 모드는 HWP/HWPX를 기본 작업물로 쓰지 않습니다. `corrections/changes.json`을 plain text에 적용해 `final_manuscript/editorial_candidate.txt`와 `corrections/editorial_diff.md`를 생성합니다. 중간 확인이 필요하면 `render-marked-manuscript-md`로 원문 순서 그대로 기호가 들어간 MD 검수본을 생성합니다. 한글 검토나 납품 요구가 있으면 `render-marked-manuscript-hwpx`도 함께 생성합니다.
+
+최종 승인 패키지는 `render-final-delivery`가 생성합니다. 기본 납품 원고는 TXT이고, 기본 human-facing 보고서는 HTML입니다.
 
 정합성 평가와 교정은 반복합니다. `llm-facing/correction_plan.md`에 교정 batch를 만들고, 적용 후 `llm-facing/consistency_correction_loop.md`에 해결/신규/회귀/잔여 리스크를 남깁니다. 최종 개선은 `human-facing/final_improvement_report.md`에 Before/After와 근거 중심으로 정리합니다.
 

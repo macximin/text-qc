@@ -42,6 +42,40 @@ CANONICAL_NAME_ALIAS_RULE = (
     "장면 기능이 명확할 때만 원문 앵커와 함께 ⓐⓐ 예외 후보로 올린다."
 )
 
+GLOBAL_CONTEXT_SCAN_RULE = (
+    "HWP 계열, AI 작성 의심, glossary 미정렬, 중복/화수 이상 가능성이 있는 원고는 "
+    "회차별 수정 전에 전역 컨텍스트 스캔을 먼저 수행한다. 전역 스캔은 수정 지시가 아니라 "
+    "앞/뒤 모순 분포, 정본 후보, 수정 비용이 낮은 방향을 찾기 위한 지도다."
+)
+
+SOURCE_RISK_CHECKLIST: tuple[dict[str, str], ...] = (
+    {
+        "risk_id": "source-risk-ai-slop",
+        "label": "AI 작성/AI-slop 가능성",
+        "rule": "AI 작성 가능성은 증명이 아니라 사전 리스크다. 반복 리캡, 장면 접합, 시간 역류, 정보 상태 회귀, 균질한 문장 리듬을 먼저 의심한다.",
+    },
+    {
+        "risk_id": "source-risk-glossary-missing",
+        "label": "glossary 미정렬 가능성",
+        "rule": "고유명사, 실명/가명, 약칭/이니셜은 전역 치환하지 않는다. 직접 근거가 생길 때까지 정본 보류로 둔다.",
+    },
+    {
+        "risk_id": "source-risk-consistency-duplication",
+        "label": "정합성/중복 문제 가능성",
+        "rule": "중복 회차, 중복 리캡, 사건 상태 회귀, 앞뒤 화 브리지 결손을 root gate로 먼저 본다.",
+    },
+    {
+        "risk_id": "source-risk-internal-memos",
+        "label": "인간 검수자 내부 메모 잔존 가능성",
+        "rule": "대괄호, 괄호 대안문, 슬래시 병기, 비독자-facing 코멘트는 삭제 전 내부 메모인지 장면 장치인지 분리한다.",
+    },
+    {
+        "risk_id": "source-risk-episode-numbering",
+        "label": "화수 표기/분할 이상 가능성",
+        "rule": "HWP 계열 추출에서는 회차 번호 누락, 중복 번호, 검수자 삭제로 인한 gap, oversized merged episode를 내용 검수 전 먼저 닫는다.",
+    },
+)
+
 PASS_NAMES: tuple[str, ...] = ("pass1", "pass2", "pass3")
 
 PRIMARY_REVIEW_LANE = "primary"

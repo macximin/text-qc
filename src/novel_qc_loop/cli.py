@@ -13,10 +13,12 @@ from .corrections import (
     validate_changes_file,
     write_validation_result,
 )
+from .delivery import build_final_delivery_package
 from .hwpx_review import render_marked_manuscript_hwpx, render_marked_manuscript_md
 from .intake import intake_inbox, intake_manuscript
 from .package_qc import inspect_epub_packages, write_epub_package_qc
 from .protocol import GATE_PROFILE_ORDER, normalize_gate_profile
+from .qc import render_qc_html, validate_qc_jsonl_files
 from .reports import (
     export_markdown_to_pdf,
     render_author_final_report,
@@ -30,6 +32,7 @@ from .submission import (
     workflow_blockers_from_validation,
     write_submission_validation_result,
 )
+from .source_integrity import plan_source_integrity_repair
 from .typography import normalize_korean_typography_file
 from .workspace import (
     build_portfolio_status,
@@ -104,6 +107,62 @@ def cmd_validate_changes(args: argparse.Namespace) -> int:
         write_validation_result(result, Path(args.output))
         print(f"correction validation written: {args.output}")
         return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def resolve_qc_jsonl_paths(args: argparse.Namespace) -> list[Path]:
+    if args.ledger:
+        return [Path(value).resolve() for value in args.ledger]
+    if not args.run_root:
+        raise SystemExit("provide --ledger or --run-root")
+    qc_dir = Path(args.run_root).resolve() / "editorial_pass" / "qc"
+    if args.include_ssot:
+        paths = (
+            sorted(qc_dir.glob("qc_ssot*.jsonl"))
+            + sorted(qc_dir.glob("global_context_scan*.jsonl"))
+            + sorted(qc_dir.glob("qc_ledger*.jsonl"))
+        )
+    else:
+        paths = sorted(qc_dir.glob("global_context_scan*.jsonl")) + sorted(qc_dir.glob("qc_ledger*.jsonl"))
+    if not paths:
+        raise SystemExit(f"no QC JSONL files found under {qc_dir}")
+    return paths
+
+
+def cmd_validate_qc_jsonl(args: argparse.Namespace) -> int:
+    paths = resolve_qc_jsonl_paths(args)
+    result = validate_qc_jsonl_files(paths)
+    if args.output:
+        write_json(Path(args.output), result.to_dict())
+        print(f"QC JSONL validation written: {args.output}")
+        return 0
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 1 if result.invalid else 0
+
+
+def cmd_render_qc_html(args: argparse.Namespace) -> int:
+    paths = resolve_qc_jsonl_paths(args)
+    if args.output:
+        output_path = Path(args.output).resolve()
+    elif args.run_root:
+        output_path = Path(args.run_root).resolve() / "editorial_pass" / "qc" / "qc_review.html"
+    else:
+        output_path = paths[0].with_suffix(".html")
+    result = render_qc_html(paths=paths, output_path=output_path, title=args.title)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_plan_source_repair(args: argparse.Namespace) -> int:
+    result = plan_source_integrity_repair(
+        run_root=Path(args.run_root),
+        input_path=Path(args.input).resolve() if args.input else None,
+        output_dir=Path(args.output_dir).resolve() if args.output_dir else None,
+        version=args.version,
+        accept_direct=args.accept_direct,
+        confidence_threshold=args.confidence_threshold,
+    )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -515,6 +574,21 @@ def cmd_render_author_final_report(args: argparse.Namespace) -> int:
     if pdf_path:
         print(f"author final report PDF written: {pdf_path}")
     print(json.dumps(validation, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_render_final_delivery(args: argparse.Namespace) -> int:
+    result = build_final_delivery_package(
+        run_root=Path(args.run_root).resolve(),
+        output_dir=Path(args.output_dir).resolve() if args.output_dir else None,
+        version=args.version,
+        manuscript_path=Path(args.manuscript).resolve() if args.manuscript else None,
+        scan_manifest_path=Path(args.scan_manifest).resolve() if args.scan_manifest else None,
+        title=args.title,
+        work_label=args.work_label,
+        update_run_manifest=not args.no_manifest_update,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -972,6 +1046,37 @@ def build_parser() -> argparse.ArgumentParser:
     validate_submission.add_argument("--output")
     validate_submission.set_defaults(func=cmd_validate_submission)
 
+    validate_qc = subparsers.add_parser("validate-qc-jsonl", help="validate lightweight QC JSONL ledgers")
+    validate_qc.add_argument("--run-root", help="run folder; defaults to RUN/editorial_pass/qc/qc_ledger*.jsonl")
+    validate_qc.add_argument("--ledger", nargs="*", help="one or more QC JSONL files")
+    validate_qc.add_argument("--include-ssot", action="store_true", help="also validate qc_ssot*.jsonl under --run-root")
+    validate_qc.add_argument("--output", help="write validation JSON")
+    validate_qc.set_defaults(func=cmd_validate_qc_jsonl)
+
+    qc_html = subparsers.add_parser("render-qc-html", help="render lightweight QC JSONL ledgers to HTML on demand")
+    qc_html.add_argument("--run-root", help="run folder; defaults output to RUN/editorial_pass/qc/qc_review.html")
+    qc_html.add_argument("--ledger", nargs="*", help="one or more QC JSONL files")
+    qc_html.add_argument("--include-ssot", action="store_true", help="also render qc_ssot*.jsonl under --run-root")
+    qc_html.add_argument("--output", help="HTML output path")
+    qc_html.add_argument("--title", default="QC Ledger")
+    qc_html.set_defaults(func=cmd_render_qc_html)
+
+    source_repair = subparsers.add_parser(
+        "plan-source-repair",
+        help="create a traceable source integrity repair candidate without changing the original run source",
+    )
+    source_repair.add_argument("--run-root", required=True)
+    source_repair.add_argument("--input", help="optional source file/folder override")
+    source_repair.add_argument("--output-dir", help="output folder; default RUN/source_integrity/VERSION")
+    source_repair.add_argument("--version", default="v1")
+    source_repair.add_argument(
+        "--accept-direct",
+        action="store_true",
+        help="promote safe >= confidence-threshold source repairs into the run working source",
+    )
+    source_repair.add_argument("--confidence-threshold", type=int, default=95)
+    source_repair.set_defaults(func=cmd_plan_source_repair)
+
     validate_report = subparsers.add_parser("validate-report", help="validate Korean human-facing final report")
     validate_report.add_argument("--report")
     validate_report.add_argument("--run-root")
@@ -1005,6 +1110,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     render_author.add_argument("--allow-incomplete", action="store_true")
     render_author.set_defaults(func=cmd_render_author_final_report)
+
+    final_delivery = subparsers.add_parser(
+        "render-final-delivery",
+        help="package the approved TXT manuscript and human-facing HTML final report",
+    )
+    final_delivery.add_argument("--run-root", required=True)
+    final_delivery.add_argument("--output-dir", help="output folder; default: RUN/final_delivery/VERSION_final_approved_package")
+    final_delivery.add_argument("--version", default="v1")
+    final_delivery.add_argument("--manuscript", help="approved manuscript source; default: run final_manuscript.txt")
+    final_delivery.add_argument("--scan-manifest", help="final scan manifest; default: latest consistency_integrity manifest")
+    final_delivery.add_argument("--title", default="")
+    final_delivery.add_argument("--work-label", default="")
+    final_delivery.add_argument("--no-manifest-update", action="store_true")
+    final_delivery.set_defaults(func=cmd_render_final_delivery)
 
     export_pdf = subparsers.add_parser("export-report-pdf", help="export a Markdown report to PDF")
     export_pdf.add_argument("--report", required=True)

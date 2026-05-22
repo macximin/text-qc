@@ -74,6 +74,33 @@ Gate profile: `{{gate_profile}}` / `{{gate_profile_label}}`
 - 웹소설식 과장과 허세는 허용하되, 숫자/금액/시간/지분/직함/완료 상태 carryover는 엄격히 본다.
 - 독자-facing하지 않은 내부 메모, 정본 선택 보류, 작가 확인용 질문도 삭제하지 말고 내부 장부에 남긴다.
 - 최종 원고 후보는 `final_manuscript/final_manuscript.txt`에 둔다.
+- 최종 승인 패키지는 `render-final-delivery`로 만든다. 기본 납품 원고는 TXT, 기본 human-facing 보고서는 HTML이다.
+
+## 전역 컨텍스트 스캔 우선
+
+HWP 계열, AI 작성 의심, glossary 미정렬, 중복/화수 이상 가능성이 있는 원고는 회차별 수정 전에 전역 컨텍스트 스캔을 먼저 수행한다.
+
+전역 스캔은 수정 지시가 아니다. 목적은 앞/뒤 모순 분포, 정본 후보, 수정 비용이 낮은 방향을 찾는 지도 작성이다. 10화 단위 검수와 본문 수정은 이 지도가 생긴 뒤 시작한다.
+
+전역 스캔 최소 축:
+
+- HWP 추출/회차 분할 무결성
+- glossary/고유명사/실명·가명/약칭 분포
+- 시간축/상대시간/사건 상태 carryover
+- 돈/수익률/계좌/지분 carryover
+- 중복 회차/중복 리캡/앞뒤 화 브리지
+- 내부 메모/대안문/슬래시 병기/비독자-facing 흔적
+- AI-slop 신호: 반복, 장면 접합, 정보 상태 회귀, 균질 리듬
+
+## 사전 리스크 체크리스트
+
+이 체크리스트는 확정 사실이 아니라 초기 감리 가설이다. 각 항목은 직접 근거를 확인하기 전까지 `blocked` 또는 `needs_human`으로 둔다.
+
+- AI 작성/AI-slop 가능성: 반복 리캡, 장면 접합, 시간 역류, 정보 상태 회귀, 균질한 문장 리듬을 먼저 의심한다.
+- glossary 미정렬 가능성: 고유명사, 실명/가명, 약칭/이니셜은 전역 치환하지 않는다. 직접 근거가 생길 때까지 정본 보류로 둔다.
+- 정합성/중복 문제 가능성: 중복 회차, 중복 리캡, 사건 상태 회귀, 앞뒤 화 브리지 결손을 root gate로 먼저 본다.
+- 인간 검수자 내부 메모 잔존 가능성: 대괄호, 괄호 대안문, 슬래시 병기, 비독자-facing 코멘트는 삭제 전 내부 메모인지 장면 장치인지 분리한다.
+- 화수 표기/분할 이상 가능성: HWP 계열 추출에서는 회차 번호 누락, 중복 번호, 검수자 삭제로 인한 gap, oversized merged episode를 내용 검수 전 먼저 닫는다.
 
 ## 모드별 목표
 
@@ -121,6 +148,7 @@ Gate profile: `{{gate_profile}}` / `{{gate_profile_label}}`
 8. 표면 교정 루프
 9. `human-facing/1차_one_page_report.md`와 최종 개선 보고서
 10. 최종 원고 후보
+11. `render-final-delivery`로 TXT 원고와 HTML 최종 보고서 패키징
 
 위 1-4번이 1개 `consistency_3x3_unit`입니다. 사용자가 "정합성 검사 3번"이라고 말하면 1-4번을 세 번 수행하고, `manual_review_submission.json`의 `consistency_repetition_contract.requested_unit_count`를 3으로 둡니다.
 

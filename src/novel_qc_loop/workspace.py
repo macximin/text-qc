@@ -22,7 +22,10 @@ RUN_SUBDIRS = (
     "draft_reports",
     "final_reports",
     "corrections",
+    "editorial_pass",
+    "editorial_pass/qc",
     "final_manuscript",
+    "final_delivery",
     "exports",
 )
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16", "utf-16-le", "utf-16-be")
