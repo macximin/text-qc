@@ -22,7 +22,7 @@
 - `.text`
 - `.md`
 - `.markdown`
-- `.hwp` (`hwp5txt` 필요)
+- `.hwp` (`hwp5proc xml` 우선, 실패 시 `hwp5txt` fallback. HWP `LINE_BREAK`는 실제 줄바꿈으로 보존)
 - `.hwpx` (`Preview/PrvText.txt` 우선, 없으면 HWPX XML 본문 fallback)
 - `.epub` (OPF spine 기준 본문 XHTML만 추출, metadata/nav/toc/cover는 제외)
 

@@ -30,6 +30,7 @@ from .workspace import (
     decode_text_bytes,
     inspect_text,
     is_chapter_heading_line,
+    is_plain_number_heading_line,
     normalize_chapter_heading_markers,
     read_json,
     read_text_auto,
@@ -159,7 +160,7 @@ def read_epub_collection_text(path: Path) -> str:
 
 
 def begins_with_chapter_marker(text: str) -> bool:
-    return any(is_chapter_heading_line(line) for line in text.splitlines()[:5])
+    return any(is_chapter_heading_line(line) or is_plain_number_heading_line(line) for line in text.splitlines()[:5])
 
 
 def read_hwpx_text(path: Path) -> str:
@@ -196,6 +197,20 @@ def read_hwpx_text(path: Path) -> str:
 
 
 def read_hwp_text(path: Path) -> str:
+    hwp5proc = shutil.which("hwp5proc")
+    if hwp5proc:
+        result = subprocess.run(
+            [hwp5proc, "xml", "--no-validate-wellformed", str(path)],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            xml_text = decode_text_bytes(result.stdout).strip()
+            if xml_text:
+                text = extract_hwp5_xml_text(xml_text).strip()
+                if text:
+                    return text
+
     hwp5txt = shutil.which("hwp5txt")
     if not hwp5txt:
         raise RuntimeError("hwp5txt is required to extract .hwp text but was not found on PATH")
@@ -211,6 +226,37 @@ def read_hwp_text(path: Path) -> str:
     if not text:
         raise ValueError(f"HWP text not found: {path}")
     return text
+
+
+def extract_hwp5_xml_text(document: str) -> str:
+    root = ET.fromstring(document.encode("utf-8"))
+    body = first_descendant(root, "bodytext")
+    if body is None:
+        return ""
+
+    lines: list[str] = []
+    for paragraph in body.iter():
+        if local_name(paragraph.tag) != "paragraph":
+            continue
+        current: list[str] = []
+        saw_text_or_break = False
+        for elem in paragraph.iter():
+            tag = local_name(elem.tag)
+            if tag == "text":
+                current.append(elem.text or "")
+                saw_text_or_break = True
+            elif tag == "controlchar":
+                name = (elem.attrib.get("name") or "").upper()
+                if name == "LINE_BREAK":
+                    lines.append("".join(current))
+                    current = []
+                    saw_text_or_break = True
+                elif name == "PARAGRAPH_BREAK":
+                    saw_text_or_break = True
+        line = "".join(current)
+        if saw_text_or_break or line:
+            lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def read_epub_text(path: Path) -> str:

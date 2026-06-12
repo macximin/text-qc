@@ -89,7 +89,7 @@ workspace/canaria/
 .\scripts\novel-qc-loop.ps1 intake-inbox --mode full
 ```
 
-지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwp`, `.hwpx`, `.epub` 및 지원 원고 파일이 들어 있는 폴더입니다. `.hwp`는 PATH의 `hwp5txt`로 텍스트를 추출합니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. EPUB 파일 또는 폴더를 넣으면 `evidence/package/epub_package_qc.*`에 언어, UUID 중복, 파일명 규칙 같은 패키지 QC도 함께 남깁니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, `ⓚ제1화`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
+지원 입력은 `.txt`, `.text`, `.md`, `.markdown`, `.hwp`, `.hwpx`, `.epub` 및 지원 원고 파일이 들어 있는 폴더입니다. `.hwp`는 PATH의 `hwp5proc xml`을 우선 사용해 HWP `LINE_BREAK`를 실제 줄바꿈으로 보존한 뒤 텍스트를 추출하고, 실패하면 `hwp5txt`로 fallback합니다. EPUB은 OPF spine의 본문 XHTML만 읽고 metadata/nav/toc/cover 계열은 제외합니다. EPUB 파일 또는 폴더를 넣으면 `evidence/package/epub_package_qc.*`에 언어, UUID 중복, 파일명 규칙 같은 패키지 QC도 함께 남깁니다. 텍스트 인코딩은 UTF-8/CP949/EUC-KR/UTF-16 계열을 자동 감지하고, 회차 표기는 `ⓚ001`, `ⓚ제1화`, Markdown 제목, `제1화`, `001화`, `1장`, `Episode 1` 계열을 우선 인식합니다.
 
 intake는 회차 표기와 같은 줄의 소제목 마커를 `ⓚ`로 통일합니다. `# 제1화`, `#001 소제목`, `제1화 소제목`처럼 `#`이 쓰였거나 마커가 빠진 회차 헤더는 `ⓚ...`로 정규화하고, 숫자 없는 Markdown 제목만 있는 원고는 순서대로 `ⓚ제N화 제목`을 붙입니다. 폴더/EPUB 묶음에서 회차 헤더가 아예 없으면 `ⓚ제N화`를 붙입니다. 본문 안의 독립 소제목은 회차 헤더로 확정되지 않으면 자동으로 고치지 않습니다.
 

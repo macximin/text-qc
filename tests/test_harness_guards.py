@@ -15,6 +15,7 @@ from novel_qc_loop.ai_slop import scan_ai_slop_text  # noqa: E402
 from novel_qc_loop.corrections import apply_changes_to_text_file, validate_change_item  # noqa: E402
 from novel_qc_loop.delivery import build_final_delivery_package  # noqa: E402
 from novel_qc_loop.hwpx_review import render_marked_manuscript_md  # noqa: E402
+from novel_qc_loop.intake import begins_with_chapter_marker, extract_hwp5_xml_text  # noqa: E402
 from novel_qc_loop.qc import render_qc_html, validate_qc_jsonl_files  # noqa: E402
 from novel_qc_loop.reports import (  # noqa: E402
     validate_claim_evidence_tables,
@@ -46,6 +47,7 @@ from novel_qc_loop.submission import (  # noqa: E402
 )
 from novel_qc_loop.workspace import (  # noqa: E402
     find_chapter_markers,
+    normalize_chapter_heading_markers,
     normalize_chapter_heading_line,
 )
 
@@ -341,6 +343,16 @@ class HarnessGuardTests(unittest.TestCase):
         self.assertEqual("ⓚ제18화", normalize_chapter_heading_line("ⓚ제 18화"))
         self.assertEqual("ⓚ제18화 소제목", normalize_chapter_heading_line("# 제 18화 - 소제목"))
 
+    def test_plain_number_dot_headings_are_normalized_when_repeated(self) -> None:
+        text = "126.\n첫 줄\n127.\n다음 줄\n"
+        normalized = normalize_chapter_heading_markers(text)
+        markers = find_chapter_markers(normalized)
+
+        self.assertIn("ⓚ126.", normalized)
+        self.assertIn("ⓚ127.", normalized)
+        self.assertEqual(["126", "127"], [row["episode"] for row in markers])
+        self.assertTrue(begins_with_chapter_marker(text))
+
     def test_source_repair_splits_only_monotonic_embedded_tail_labels(self) -> None:
         text = "\n".join(
             [
@@ -361,6 +373,27 @@ class HarnessGuardTests(unittest.TestCase):
         self.assertEqual(["053", "054", "055"], [row["base_episode"] for row in build_sequence_rows(repaired)])
         self.assertEqual(2, len(changes))
         self.assertNotIn("문장.54화", repaired)
+
+    def test_hwp_xml_line_break_is_preserved_as_text_newline(self) -> None:
+        xml = """<?xml version="1.0" encoding="utf-8"?>
+<HwpDoc>
+  <BodyText>
+    <Paragraph>
+      <LineSeg>
+        <Text>이건 또 무슨 말이야.</Text>
+        <ControlChar name="LINE_BREAK" code="10" kind="CHAR" char="&#10;" />
+      </LineSeg>
+      <LineSeg>
+        <Text>단순한 쿠데타가 아니었단 말인가.</Text>
+        <ControlChar name="PARAGRAPH_BREAK" code="13" kind="CHAR" char="&#13;" />
+      </LineSeg>
+    </Paragraph>
+  </BodyText>
+</HwpDoc>"""
+
+        text = extract_hwp5_xml_text(xml)
+
+        self.assertEqual("이건 또 무슨 말이야.\n단순한 쿠데타가 아니었단 말인가.", text)
 
     def test_source_repair_blocks_slash_tail_labels_without_flagging_plain_end_labels(self) -> None:
         text = "\n".join(

@@ -67,7 +67,7 @@ NUMBERED_CHAPTER_BODY_RE = re.compile(
 )
 ENGLISH_CHAPTER_BODY_RE = re.compile(rf"(?im)^(?:chapter|ep(?:isode)?){LINE_WS}*\d{{1,4}}\b.*$")
 PLAIN_NUMBER_HEADING_BODY_RE = re.compile(
-    rf"(?im)^\d{{1,4}}(?:{LINE_WS}*$|{HEADING_SEP}+.+$)"
+    rf"(?im)^\d{{1,4}}(?:[.)．]{LINE_WS}*$|{LINE_WS}*$|{HEADING_SEP}+.+$)"
 )
 
 
@@ -365,10 +365,16 @@ def find_chapter_markers(text: str) -> list[dict[str, Any]]:
 
 def normalize_chapter_heading_markers(text: str) -> str:
     raw_lines = text.splitlines(keepends=True)
+    plain_number_heading_count = sum(
+        1
+        for raw_line in raw_lines
+        if is_plain_number_heading_line(split_line_ending(raw_line)[0])
+    )
+    allow_plain_number_headings = plain_number_heading_count >= 2
     has_numbered_heading = any(
         is_chapter_heading_line(split_line_ending(raw_line)[0])
         for raw_line in raw_lines
-    )
+    ) or allow_plain_number_headings
     lines: list[str] = []
     markdown_heading_index = 0
     for raw_line in raw_lines:
@@ -380,7 +386,7 @@ def normalize_chapter_heading_markers(text: str) -> str:
                 episode_index=markdown_heading_index,
             )
         else:
-            normalized = normalize_chapter_heading_line(line)
+            normalized = normalize_chapter_heading_line(line, allow_plain_number=allow_plain_number_headings)
         lines.append(normalized + newline)
     if text and not lines:
         return normalize_chapter_heading_line(text)
@@ -397,7 +403,7 @@ def split_line_ending(raw_line: str) -> tuple[str, str]:
     return raw_line, ""
 
 
-def normalize_chapter_heading_line(line: str) -> str:
+def normalize_chapter_heading_line(line: str, *, allow_plain_number: bool = False) -> str:
     indent_match = re.match(r"^(\s*)", line)
     indent = indent_match.group(1) if indent_match else ""
     stripped = line.strip()
@@ -410,7 +416,7 @@ def normalize_chapter_heading_line(line: str) -> str:
         body = K_PREFIX_RE.sub("", body, count=1).strip()
         return f"{indent}ⓚ{canonicalize_chapter_heading_body(body)}" if body else line
 
-    if is_chapter_heading_body(body, allow_plain_number=has_hash_marker):
+    if is_chapter_heading_body(body, allow_plain_number=has_hash_marker or allow_plain_number):
         return f"{indent}ⓚ{canonicalize_chapter_heading_body(body)}"
     return line
 
@@ -461,6 +467,15 @@ def is_chapter_heading_line(line: str) -> bool:
         body = K_PREFIX_RE.sub("", body, count=1).strip()
         return is_chapter_heading_body(body, allow_plain_number=True)
     return is_chapter_heading_body(body, allow_plain_number=has_hash_marker)
+
+
+def is_plain_number_heading_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if HASH_PREFIX_RE.match(stripped) or K_PREFIX_RE.match(stripped):
+        return False
+    return bool(PLAIN_NUMBER_HEADING_BODY_RE.match(stripped))
 
 
 def is_chapter_heading_body(body: str, *, allow_plain_number: bool = False) -> bool:
