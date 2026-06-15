@@ -14,25 +14,393 @@ from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitl
 
 BLUE = "#0000FF"
 BLACK_CHARPR = "0"
-BLUE_CHARPR = "1"
+BLUE_CHARPR = "14"
 LINE_CHARS = 230
-HWPX_FONT_HEIGHT = 2000
 HWPX_CHARS_PER_LINE = 24
 LINE_HEIGHT = 3200
 LINE_SEG_TEXT_HEIGHT = 2000
 LINE_SEG_BASELINE = 1700
 LINE_SEG_SPACING = 1200
 HWPX_RENDERER_OWNS_LAYOUT = True
-HWPX_PAGE_WIDTH = 59528
-HWPX_PAGE_HEIGHT = 84188
-HWPX_MARGIN_TOP = 5668
-HWPX_MARGIN_HEADER = 4252
-HWPX_MARGIN_LEFT = 8504
-HWPX_MARGIN_RIGHT = 8504
+HWPX_PAGE_WIDTH = 36852
+HWPX_PAGE_HEIGHT = 53575
+HWPX_MARGIN_TOP = 5669
+HWPX_MARGIN_HEADER = 2126
+HWPX_MARGIN_LEFT = 7000
+HWPX_MARGIN_RIGHT = 5669
 HWPX_MARGIN_GUTTER = 0
-HWPX_MARGIN_FOOTER = 4252
-HWPX_MARGIN_BOTTOM = 4252
+HWPX_MARGIN_FOOTER = 2126
+HWPX_MARGIN_BOTTOM = 5669
 HWPX_TEXT_WIDTH = HWPX_PAGE_WIDTH - HWPX_MARGIN_LEFT - HWPX_MARGIN_RIGHT - HWPX_MARGIN_GUTTER
+DP_BODY_PARA_PR = "2"
+DP_BODY_STYLE_ID = "17"
+DP_DEFAULT_TAB = "0"
+LANG_KEYS = ("hangul", "latin", "hanja", "japanese", "other", "symbol", "user")
+
+
+def lang_attrs(value: str) -> dict[str, str]:
+    return {key: value for key in LANG_KEYS}
+
+
+DP_FONTFACE_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
+    (
+        "HANGUL",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("한양견고딕", "HFT"),
+            ("한양신명조", "HFT"),
+            ("한양중고딕", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "LATIN",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("산세리프", "HFT"),
+            ("한양견고딕", "HFT"),
+            ("한양신명조", "HFT"),
+            ("한양중고딕", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "HANJA",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("한양신명조", "HFT"),
+            ("한양중고딕", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "JAPANESE",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("한양신명조", "HFT"),
+            ("한양중고딕", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "OTHER",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("한양신명조", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "SYMBOL",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("한양신명조", "HFT"),
+            ("한양중고딕", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+    (
+        "USER",
+        [
+            ("맑은 고딕", "TTF"),
+            ("한컴바탕", "TTF"),
+            ("함초롬돋움", "TTF"),
+            ("명조", "HFT"),
+            ("'DXMSUBTITLESSTD-M'", "TTF"),
+        ],
+    ),
+]
+
+DP_CHAR_PROPERTIES: list[dict[str, Any]] = [
+    {
+        "id": "0",
+        "height": "1052",
+        "color": "#000000",
+        "border": "2",
+        "font": lang_attrs("1"),
+        "ratio": lang_attrs("97"),
+        "spacing": lang_attrs("-10"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "1",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": lang_attrs("2"),
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#B2B2B2",
+    },
+    {
+        "id": "2",
+        "height": "1300",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "6",
+            "latin": "7",
+            "hanja": "5",
+            "japanese": "5",
+            "other": "4",
+            "symbol": "5",
+            "user": "4",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#B2B2B2",
+    },
+    {
+        "id": "3",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "4",
+            "latin": "3",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "4",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "4",
+            "latin": "5",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "5",
+        "height": "900",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "4",
+            "latin": "5",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "6",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "4",
+            "latin": "5",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": {
+            "hangul": "95",
+            "latin": "98",
+            "hanja": "100",
+            "japanese": "100",
+            "other": "100",
+            "symbol": "100",
+            "user": "100",
+        },
+        "spacing": {
+            "hangul": "-5",
+            "latin": "0",
+            "hanja": "0",
+            "japanese": "0",
+            "other": "0",
+            "symbol": "0",
+            "user": "0",
+        },
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "7",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "3",
+            "latin": "4",
+            "hanja": "4",
+            "japanese": "4",
+            "other": "3",
+            "symbol": "4",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "8",
+        "height": "900",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "5",
+            "latin": "6",
+            "hanja": "4",
+            "japanese": "4",
+            "other": "3",
+            "symbol": "4",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "9",
+        "height": "948",
+        "color": "#000000",
+        "border": "1",
+        "font": {
+            "hangul": "4",
+            "latin": "5",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "10",
+        "height": "1000",
+        "color": "#000000",
+        "border": "1",
+        "font": lang_attrs("0"),
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#B2B2B2",
+    },
+    {
+        "id": "11",
+        "height": "1000",
+        "color": "#000000",
+        "border": "2",
+        "font": {
+            "hangul": "4",
+            "latin": "5",
+            "hanja": "3",
+            "japanese": "3",
+            "other": "3",
+            "symbol": "3",
+            "user": "3",
+        },
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#C0C0C0",
+    },
+    {
+        "id": "12",
+        "height": "1000",
+        "color": "#FF1C1C",
+        "border": "1",
+        "font": lang_attrs("2"),
+        "ratio": lang_attrs("100"),
+        "spacing": lang_attrs("0"),
+        "shadow": "#B2B2B2",
+    },
+    {
+        "id": "13",
+        "height": "1052",
+        "color": "#FF0000",
+        "border": "2",
+        "font": lang_attrs("1"),
+        "ratio": lang_attrs("97"),
+        "spacing": lang_attrs("-10"),
+        "shadow": "#C0C0C0",
+    },
+]
+
+DP_PARA_PROPERTIES: list[dict[str, str]] = [
+    {"id": "0", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "0", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "1", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "0", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "2"},
+    {"id": "2", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "1052", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "2"},
+    {"id": "3", "tab": "0", "grid": "1", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "1350", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "4", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "0", "left": "1752", "right": "1752", "prev": "424", "next": "424", "line": "165", "border": "1"},
+    {"id": "5", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "6", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "1000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "7", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "2000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "8", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "3000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "9", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "4000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "10", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "5000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "11", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-744", "left": "6000", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "12", "tab": "1", "grid": "0", "align": "RIGHT", "breakNonLatin": "BREAK_WORD", "widow": "0", "intent": "0", "left": "0", "right": "1000", "prev": "360", "next": "0", "line": "150", "border": "1"},
+    {"id": "13", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "-1320", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "130", "border": "1"},
+    {"id": "14", "tab": "2", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "0", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "160", "border": "1"},
+    {"id": "15", "tab": "0", "grid": "1", "align": "JUSTIFY", "breakNonLatin": "BREAK_WORD", "widow": "1", "intent": "0", "left": "0", "right": "0", "prev": "0", "next": "800", "line": "150", "border": "1"},
+    {"id": "16", "tab": "0", "grid": "1", "align": "JUSTIFY", "breakNonLatin": "BREAK_WORD", "widow": "1", "intent": "0", "left": "8000", "right": "0", "prev": "0", "next": "800", "line": "150", "border": "1"},
+    {"id": "17", "tab": "0", "grid": "0", "align": "JUSTIFY", "breakNonLatin": "KEEP_WORD", "widow": "0", "intent": "1052", "left": "0", "right": "0", "prev": "0", "next": "0", "line": "170", "border": "2"},
+]
+
+DP_STYLES: list[tuple[str, str, str, str, str, str, str]] = [
+    ("0", "PARA", "바탕글", "Normal", "1", "11", "0"),
+    ("1", "PARA", "본문", "", "4", "6", "1"),
+    ("2", "PARA", "개요 1", "", "5", "4", "2"),
+    ("3", "PARA", "개요 2", "", "6", "4", "3"),
+    ("4", "PARA", "개요 3", "", "7", "4", "4"),
+    ("5", "PARA", "개요 4", "", "8", "4", "5"),
+    ("6", "PARA", "개요 5", "", "9", "4", "6"),
+    ("7", "PARA", "개요 6", "", "10", "4", "7"),
+    ("8", "PARA", "개요 7", "", "11", "4", "8"),
+    ("9", "PARA", "쪽 번호", "Page Number", "0", "7", "9"),
+    ("10", "PARA", "머리말", "", "12", "8", "10"),
+    ("11", "PARA", "각주", "", "13", "9", "11"),
+    ("12", "PARA", "그림캡션", "", "0", "8", "12"),
+    ("13", "PARA", "표캡션", "", "0", "8", "13"),
+    ("14", "PARA", "수식캡션", "", "0", "8", "14"),
+    ("15", "PARA", "찾아보기", "", "14", "5", "15"),
+    ("16", "PARA", "선그리기", "", "0", "3", "16"),
+    ("17", "PARA", "원재46", "", "2", "0", "17"),
+    ("18", "PARA", "MS바탕글", "MsoNormal", "15", "10", "18"),
+    ("19", "PARA", "MsoListParagraph", "MsoListParagraph", "16", "10", "19"),
+    ("20", "PARA", "P.P1", "", "3", "1", "20"),
+    ("21", "PARA", "P.P2", "", "3", "1", "21"),
+    ("22", "CHAR", "SPAN.S1", "", "0", "2", "3"),
+    ("23", "PARA", "P.P3", "", "3", "12", "23"),
+]
 
 
 @dataclass(slots=True)
@@ -910,7 +1278,8 @@ def build_section_xml(lines: list[list[ReviewRun]]) -> tuple[str, str]:
         line_segments = "" if HWPX_RENDERER_OWNS_LAYOUT else line_seg_array(vert, line_count)
         paras.append(
             (
-                f'<hp:p id="{index}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" '
+                f'<hp:p id="{index}" paraPrIDRef="{DP_BODY_PARA_PR}" '
+                f'styleIDRef="{DP_BODY_STYLE_ID}" pageBreak="0" '
                 f'columnBreak="0" merged="0">{body}{line_segments}</hp:p>'
             )
         )
@@ -969,8 +1338,8 @@ def section_properties_run() -> str:
     return (
         f'<hp:run charPrIDRef="{BLACK_CHARPR}">'
         '<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" '
-        'tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" '
-        'memoShapeIDRef="1" textVerticalWidthHead="0" masterPageCnt="0">'
+        'tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="0" '
+        'memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">'
         '<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/>'
         '<hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>'
         '<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" '
@@ -985,15 +1354,23 @@ def section_properties_run() -> str:
         f'bottom="{HWPX_MARGIN_BOTTOM}"/></hp:pagePr>'
         '<hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" '
         'suffixChar=")" supscript="0"/><hp:noteLine length="-1" type="SOLID" '
-        'width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="283" '
-        'belowLine="567" aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/>'
+        'width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="284" '
+        'belowLine="568" aboveLine="852"/><hp:numbering type="CONTINUOUS" newNum="1"/>'
         '<hp:placement place="EACH_COLUMN" beneathText="0"/></hp:footNotePr>'
         '<hp:endNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" '
-        'suffixChar=")" supscript="0"/><hp:noteLine length="-1" type="SOLID" '
-        'width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="0" belowLine="567" '
-        'aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/>'
+        'suffixChar=")" supscript="0"/><hp:noteLine length="0" type="NONE" '
+        'width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="0" belowLine="576" '
+        'aboveLine="864"/><hp:numbering type="CONTINUOUS" newNum="1"/>'
         '<hp:placement place="END_OF_DOCUMENT" beneathText="0"/></hp:endNotePr>'
         '<hp:pageBorderFill type="BOTH" borderFillIDRef="1" textBorder="PAPER" '
+        'headerInside="0" footerInside="0" fillArea="PAPER">'
+        '<hp:offset left="1417" right="1417" top="1417" bottom="1417"/>'
+        '</hp:pageBorderFill>'
+        '<hp:pageBorderFill type="EVEN" borderFillIDRef="1" textBorder="PAPER" '
+        'headerInside="0" footerInside="0" fillArea="PAPER">'
+        '<hp:offset left="1417" right="1417" top="1417" bottom="1417"/>'
+        '</hp:pageBorderFill>'
+        '<hp:pageBorderFill type="ODD" borderFillIDRef="1" textBorder="PAPER" '
         'headerInside="0" footerInside="0" fillArea="PAPER">'
         '<hp:offset left="1417" right="1417" top="1417" bottom="1417"/>'
         '</hp:pageBorderFill>'
@@ -1003,8 +1380,6 @@ def section_properties_run() -> str:
 
 
 def header_xml() -> str:
-    fontface_langs = ["HANGUL", "LATIN", "HANJA", "JAPANESE", "OTHER", "SYMBOL", "USER"]
-    fontfaces = "".join(fontface(lang) for lang in fontface_langs)
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
         '<hh:head xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" '
@@ -1025,7 +1400,7 @@ def header_xml() -> str:
         'version="1.4" secCnt="1">'
         '<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>'
         '<hh:refList>'
-        f'<hh:fontfaces itemCnt="7">{fontfaces}</hh:fontfaces>'
+        f'{fontfaces_xml()}'
         '<hh:borderFills itemCnt="2"><hh:borderFill id="1" threeD="0" shadow="0" '
         'centerLine="NONE" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" '
         'isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
@@ -1044,76 +1419,210 @@ def header_xml() -> str:
         '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>'
         '<hc:fillBrush><hc:winBrush faceColor="none" hatchColor="#FF000000" alpha="0"/>'
         '</hc:fillBrush></hh:borderFill></hh:borderFills>'
-        '<hh:charProperties itemCnt="2">'
-        f'{char_pr(BLACK_CHARPR, "#000000")}{char_pr(BLUE_CHARPR, BLUE)}'
-        '</hh:charProperties>'
-        '<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="1"/>'
-        '</hh:tabProperties>'
-        '<hh:numberings itemCnt="1"><hh:numbering id="1" start="1"/>'
-        '</hh:numberings>'
-        '<hh:paraProperties itemCnt="1"><hh:paraPr id="0" tabPrIDRef="0" condense="0" '
-        'fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
-        '<hh:align horizontal="JUSTIFY" vertical="BASELINE"/>'
-        '<hh:heading type="NONE" idRef="0" level="0"/>'
-        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" '
-        'widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" '
-        'lineWrap="BREAK"/>'
-        '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
-        '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
-        '<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
-        '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/>'
-        '<hc:next value="0" unit="HWPUNIT"/></hh:margin>'
-        '<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hp:case><hp:default>'
-        '<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
-        '<hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/>'
-        '<hc:next value="0" unit="HWPUNIT"/></hh:margin>'
-        '<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hp:default></hp:switch>'
-        '<hh:border borderFillIDRef="2" offsetLeft="0" offsetRight="0" offsetTop="0" '
-        'offsetBottom="0" connect="0" ignoreMargin="0"/>'
-        '</hh:paraPr></hh:paraProperties>'
-        '<hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal" '
-        'paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/>'
-        '</hh:styles>'
+        f'{char_properties_xml()}'
+        f'{tab_properties_xml()}'
+        f'{para_properties_xml()}'
+        f'{styles_xml()}'
         '</hh:refList></hh:head>'
     )
 
 
-def fontface(lang: str) -> str:
+def fontfaces_xml() -> str:
+    fontfaces = "".join(
+        fontface_xml(lang, fonts) for lang, fonts in DP_FONTFACE_GROUPS
+    )
+    return f'<hh:fontfaces itemCnt="{len(DP_FONTFACE_GROUPS)}">{fontfaces}</hh:fontfaces>'
+
+
+def fontface_xml(lang: str, fonts: list[tuple[str, str]]) -> str:
+    font_items = "".join(
+        font_xml(index, face, font_type)
+        for index, (face, font_type) in enumerate(fonts)
+    )
+    return f'<hh:fontface lang="{lang}" fontCnt="{len(fonts)}">{font_items}</hh:fontface>'
+
+
+def font_xml(index: int, face: str, font_type: str) -> str:
+    safe_face = xml_escape(face, quote=True)
+    if face == "'DXMSUBTITLESSTD-M'":
+        return (
+            f'<hh:font id="{index}" face="{safe_face}" type="TTF" isEmbedded="0">'
+            '<hh:substFont face="한컴바탕" type="TTF" isEmbedded="0" binaryItemIDRef=""/>'
+            '</hh:font>'
+        )
     return (
-        f'<hh:fontface lang="{lang}" fontCnt="3"><hh:font id="0" face="바탕" '
-        'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
-        'proportion="0" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
-        'midline="1" xHeight="1"/></hh:font><hh:font id="1" face="함초롬돋움" '
-        'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
-        'proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
-        'midline="1" xHeight="1"/></hh:font><hh:font id="2" face="함초롬바탕" '
-        'type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" '
-        'proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
-        'midline="1" xHeight="1"/></hh:font></hh:fontface>'
+        f'<hh:font id="{index}" face="{safe_face}" type="{font_type}" isEmbedded="0">'
+        f'{font_type_info(face, font_type)}</hh:font>'
     )
 
 
-def char_pr(char_id: str, color: str) -> str:
+def font_type_info(face: str, font_type: str) -> str:
+    if font_type == "TTF" and face == "맑은 고딕":
+        return (
+            '<hh:typeInfo familyType="FCAT_GOTHIC" weight="5" proportion="3" '
+            'contrast="2" strokeVariation="0" armStyle="0" letterform="2" '
+            'midline="0" xHeight="4"/>'
+        )
+    if font_type == "TTF" and face == "함초롬돋움":
+        return (
+            '<hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="4" '
+            'contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
+            'midline="1" xHeight="1"/>'
+        )
+    if font_type == "TTF":
+        return (
+            '<hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="0" '
+            'contrast="0" strokeVariation="1" armStyle="1" letterform="1" '
+            'midline="1" xHeight="1"/>'
+        )
+    family_type = "FCAT_MYUNGJO" if face in {"한양신명조", "명조"} else "FCAT_GOTHIC"
     return (
-        f'<hh:charPr id="{char_id}" height="{HWPX_FONT_HEIGHT}" '
-        f'textColor="{color}" shadeColor="none" '
-        'useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">'
-        '<hh:fontRef hangul="2" latin="2" hanja="2" japanese="2" other="2" symbol="2" user="2"/>'
-        '<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" '
-        'symbol="100" user="100"/>'
-        '<hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
-        '<hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" '
-        'symbol="100" user="100"/>'
-        '<hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>'
+        f'<hh:typeInfo familyType="{family_type}" weight="0" proportion="0" '
+        'contrast="0" strokeVariation="0" armStyle="0" letterform="0" '
+        'midline="0" xHeight="0"/>'
+    )
+
+
+def char_properties_xml() -> str:
+    char_properties = "".join(char_pr_xml(spec) for spec in DP_CHAR_PROPERTIES)
+    char_properties += char_pr_xml({**DP_CHAR_PROPERTIES[0], "id": BLUE_CHARPR, "color": BLUE})
+    return (
+        f'<hh:charProperties itemCnt="{len(DP_CHAR_PROPERTIES) + 1}">'
+        f'{char_properties}</hh:charProperties>'
+    )
+
+
+def char_pr_xml(spec: dict[str, Any]) -> str:
+    return (
+        f'<hh:charPr id="{spec["id"]}" height="{spec["height"]}" '
+        f'textColor="{spec["color"]}" shadeColor="none" '
+        f'useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="{spec["border"]}">'
+        f'{lang_tag("hh:fontRef", spec["font"])}'
+        f'{lang_tag("hh:ratio", spec["ratio"])}'
+        f'{lang_tag("hh:spacing", spec["spacing"])}'
+        f'{lang_tag("hh:relSz", lang_attrs("100"))}'
+        f'{lang_tag("hh:offset", lang_attrs("0"))}'
         '<hh:underline type="NONE" shape="SOLID" color="#000000"/>'
         '<hh:strikeout shape="NONE" color="#000000"/>'
         '<hh:outline type="NONE"/>'
-        '<hh:shadow type="NONE" color="#B2B2B2" offsetX="10" offsetY="10"/>'
-        '<hh:emboss enabled="0"/>'
-        '<hh:engrave enabled="0"/>'
-        '<hh:supscript enabled="0"/>'
-        '<hh:subscript enabled="0"/>'
+        f'<hh:shadow type="NONE" color="{spec["shadow"]}" offsetX="10" offsetY="10"/>'
         '</hh:charPr>'
+    )
+
+
+def lang_tag(tag: str, attrs: dict[str, str]) -> str:
+    rendered = " ".join(f'{key}="{attrs[key]}"' for key in LANG_KEYS)
+    return f"<{tag} {rendered}/>"
+
+
+def tab_properties_xml() -> str:
+    tab_one_positions = [
+        4032,
+        8064,
+        12096,
+        16128,
+        20160,
+        24192,
+        28224,
+        32256,
+        36288,
+        40320,
+        44352,
+        52416,
+        56448,
+        60480,
+        64512,
+        68544,
+        72576,
+        76608,
+        80640,
+        84672,
+    ]
+    return (
+        '<hh:tabProperties itemCnt="3">'
+        '<hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/>'
+        '<hh:tabPr id="1" autoTabLeft="0" autoTabRight="0">'
+        f'{"".join(tab_item_xml(pos, "NONE") for pos in tab_one_positions)}'
+        '</hh:tabPr>'
+        '<hh:tabPr id="2" autoTabLeft="0" autoTabRight="0">'
+        f'{tab_item_xml(1608, "NONE")}{tab_item_xml(18648, "DASH")}'
+        '</hh:tabPr>'
+        '</hh:tabProperties>'
+    )
+
+
+def tab_item_xml(pos: int, leader: str) -> str:
+    return (
+        '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
+        f'<hh:tabItem pos="{pos}" type="LEFT" leader="{leader}" unit="HWPUNIT"/>'
+        '</hp:case><hp:default>'
+        f'<hh:tabItem pos="{pos * 2}" type="LEFT" leader="{leader}"/>'
+        '</hp:default></hp:switch>'
+    )
+
+
+def para_properties_xml() -> str:
+    return (
+        f'<hh:paraProperties itemCnt="{len(DP_PARA_PROPERTIES)}">'
+        f'{"".join(para_pr_xml(spec) for spec in DP_PARA_PROPERTIES)}'
+        '</hh:paraProperties>'
+    )
+
+
+def para_pr_xml(spec: dict[str, str]) -> str:
+    case_margin = margin_xml(spec, scale=1)
+    default_margin = margin_xml(spec, scale=2)
+    return (
+        f'<hh:paraPr id="{spec["id"]}" tabPrIDRef="{spec["tab"]}" condense="0" '
+        f'fontLineHeight="0" snapToGrid="{spec["grid"]}" suppressLineNumbers="0" checked="0">'
+        f'<hh:align horizontal="{spec["align"]}" vertical="BASELINE"/>'
+        '<hh:heading type="NONE" idRef="0" level="0"/>'
+        f'<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="{spec["breakNonLatin"]}" '
+        f'widowOrphan="{spec["widow"]}" keepWithNext="0" keepLines="0" pageBreakBefore="0" '
+        'lineWrap="BREAK"/>'
+        '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
+        '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
+        f'{case_margin}<hh:lineSpacing type="PERCENT" value="{spec["line"]}" unit="HWPUNIT"/>'
+        '</hp:case><hp:default>'
+        f'{default_margin}<hh:lineSpacing type="PERCENT" value="{spec["line"]}" unit="HWPUNIT"/>'
+        '</hp:default></hp:switch>'
+        f'<hh:border borderFillIDRef="{spec["border"]}" offsetLeft="0" offsetRight="0" '
+        'offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>'
+        '</hh:paraPr>'
+    )
+
+
+def margin_xml(spec: dict[str, str], *, scale: int) -> str:
+    return (
+        '<hh:margin>'
+        f'<hc:intent value="{scale_margin(spec["intent"], scale)}" unit="HWPUNIT"/>'
+        f'<hc:left value="{scale_margin(spec["left"], scale)}" unit="HWPUNIT"/>'
+        f'<hc:right value="{scale_margin(spec["right"], scale)}" unit="HWPUNIT"/>'
+        f'<hc:prev value="{scale_margin(spec["prev"], scale)}" unit="HWPUNIT"/>'
+        f'<hc:next value="{scale_margin(spec["next"], scale)}" unit="HWPUNIT"/>'
+        '</hh:margin>'
+    )
+
+
+def scale_margin(value: str, scale: int) -> str:
+    return str(int(value) * scale)
+
+
+def styles_xml() -> str:
+    return (
+        f'<hh:styles itemCnt="{len(DP_STYLES)}">'
+        f'{"".join(style_xml(style) for style in DP_STYLES)}'
+        '</hh:styles>'
+    )
+
+
+def style_xml(style: tuple[str, str, str, str, str, str, str]) -> str:
+    style_id, style_type, name, eng_name, para_pr, char_pr, next_style = style
+    return (
+        f'<hh:style id="{style_id}" type="{style_type}" '
+        f'name="{xml_escape(name, quote=True)}" engName="{xml_escape(eng_name, quote=True)}" '
+        f'paraPrIDRef="{para_pr}" charPrIDRef="{char_pr}" '
+        f'nextStyleIDRef="{next_style}" langID="1042" lockForm="0"/>'
     )
 
 

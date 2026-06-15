@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -14,7 +15,10 @@ from novel_qc_loop.analyze import contextual_typo_rows_for_line, enrich_fact_row
 from novel_qc_loop.ai_slop import scan_ai_slop_text  # noqa: E402
 from novel_qc_loop.corrections import apply_changes_to_text_file, validate_change_item  # noqa: E402
 from novel_qc_loop.delivery import build_final_delivery_package  # noqa: E402
-from novel_qc_loop.hwpx_review import render_marked_manuscript_md  # noqa: E402
+from novel_qc_loop.hwpx_review import (  # noqa: E402
+    render_marked_manuscript_hwpx,
+    render_marked_manuscript_md,
+)
 from novel_qc_loop.intake import begins_with_chapter_marker, extract_hwp5_xml_text  # noqa: E402
 from novel_qc_loop.qc import render_qc_html, validate_qc_jsonl_files  # noqa: E402
 from novel_qc_loop.reports import (  # noqa: E402
@@ -619,6 +623,58 @@ class HarnessGuardTests(unittest.TestCase):
             self.assertIn("수정 판단: 정본 선택 필요", text)
             self.assertNotIn("<span", text)
             self.assertEqual(2, result.rendered_changes)
+
+    def test_marked_manuscript_hwpx_uses_dp_fixed_profile_and_blue_corrections(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-marked-hwpx-") as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "source.txt"
+            changes_path = root / "changes.json"
+            output_path = root / "marked.hwpx"
+            source_path.write_text("원문A 문장.\n", encoding="utf-8")
+            changes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "id": "auto-a",
+                            "marker": "ⓐ",
+                            "operation": "replace",
+                            "find": "원문A",
+                            "replace": "교정A",
+                            "reason": "단순 맞춤법 자동승인",
+                            "status": "auto-approved",
+                        }
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = render_marked_manuscript_hwpx(
+                source_path=source_path,
+                changes_path=changes_path,
+                output_path=output_path,
+                include_manual_notes=False,
+            )
+
+            self.assertEqual(1, result.rendered_changes)
+            with zipfile.ZipFile(output_path) as archive:
+                header_xml = archive.read("Contents/header.xml").decode("utf-8")
+                section_xml = archive.read("Contents/section0.xml").decode("utf-8")
+                preview_text = archive.read("Preview/PrvText.txt").decode("utf-8")
+
+            self.assertIn('width="36852" height="53575"', section_xml)
+            self.assertIn(
+                'header="2126" footer="2126" gutter="0" left="7000" '
+                'right="5669" top="5669" bottom="5669"',
+                section_xml,
+            )
+            self.assertIn('name="원재46"', header_xml)
+            self.assertIn('paraPrIDRef="2" charPrIDRef="0"', header_xml)
+            self.assertIn('height="1052" textColor="#000000"', header_xml)
+            self.assertIn('textColor="#0000FF"', header_xml)
+            self.assertIn('charPrIDRef="14"><hp:t>교정A</hp:t>', section_xml)
+            self.assertIn('paraPrIDRef="2" styleIDRef="17"', section_xml)
+            self.assertIn("ⓐ{원문A|교정A} 문장.", preview_text)
 
     def test_aa_replace_must_be_applyable_candidate_not_review_memo(self) -> None:
         issues = validate_change_item(
