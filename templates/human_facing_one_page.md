@@ -13,8 +13,8 @@
 - 전체 글자 수: {{char_count}}
 - 공백 제외 글자 수: {{chars_no_space}}
 - 감지된 회차 수: {{chapter_count}}
-- 회차 최소 기준: 공백 제외 {{minimum_chapter_chars_no_space}}자
-- 기준 미달 회차: {{under_min_chapter_chars_no_space_summary}}
+- 회차 최소 기준: 공백 포함 {{minimum_chapter_chars}}자
+- 기준 미달 회차: {{under_min_chapter_chars_summary}}
 - 120자 이상 긴 줄: {{long_lines_120}}
 - 200자 이상 벽돌 줄: {{long_lines_200}}
 

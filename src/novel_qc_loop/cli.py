@@ -42,7 +42,9 @@ from .workspace import (
     discover_runs,
     discover_works,
     inspect_text,
+    normalize_manuscript_format,
     read_json,
+    read_text_auto,
     write_json,
 )
 
@@ -100,6 +102,25 @@ def cmd_normalize_typography(args: argparse.Namespace) -> int:
     result = normalize_korean_typography_file(input_path=input_path, output_path=output_path)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
+
+
+def cmd_normalize_manuscript_format(args: argparse.Namespace) -> int:
+    input_path = Path(args.input).resolve()
+    output_path = Path(args.output).resolve() if args.output else input_path.with_name(
+        input_path.stem + ".formatted" + input_path.suffix
+    )
+    source_text = read_text_auto(input_path)
+    formatted = normalize_manuscript_format(source_text)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(formatted, encoding="utf-8")
+    result = {
+        "input_path": str(input_path),
+        "output_path": str(output_path),
+        "changed": source_text != formatted,
+        "format_flags_after": inspect_text(output_path).manuscript_format_violation_count,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result["format_flags_after"] == 0 else 1
 
 
 def cmd_validate_changes(args: argparse.Namespace) -> int:
@@ -1254,6 +1275,14 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--input", required=True)
     inspect.add_argument("--output")
     inspect.set_defaults(func=cmd_inspect_text)
+
+    manuscript_format = subparsers.add_parser(
+        "normalize-manuscript-format",
+        help="apply default manuscript format rules: ⓚ headings, quote style, title spacing, dialogue spacing",
+    )
+    manuscript_format.add_argument("--input", required=True)
+    manuscript_format.add_argument("--output")
+    manuscript_format.set_defaults(func=cmd_normalize_manuscript_format)
 
     skeleton = subparsers.add_parser("report-skeleton", help="render a markdown report skeleton")
     skeleton.add_argument("--template", default="templates/report_global_audit.md")

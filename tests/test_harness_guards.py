@@ -11,7 +11,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from novel_qc_loop.analyze import contextual_typo_rows_for_line, enrich_fact_row  # noqa: E402
+from novel_qc_loop.analyze import (  # noqa: E402
+    build_chapter_length_flags,
+    contextual_typo_rows_for_line,
+    enrich_fact_row,
+)
 from novel_qc_loop.ai_slop import scan_ai_slop_text  # noqa: E402
 from novel_qc_loop.corrections import apply_changes_to_text_file, validate_change_item  # noqa: E402
 from novel_qc_loop.delivery import build_final_delivery_package  # noqa: E402
@@ -50,13 +54,112 @@ from novel_qc_loop.submission import (  # noqa: E402
     validate_manual_review_submission,
 )
 from novel_qc_loop.workspace import (  # noqa: E402
+    build_manuscript_format_flags,
     find_chapter_markers,
+    inspect_text,
     normalize_chapter_heading_markers,
     normalize_chapter_heading_line,
+    normalize_manuscript_format,
 )
 
 
 class HarnessGuardTests(unittest.TestCase):
+    def test_chapter_length_gate_uses_chars_including_spaces(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="novel-qc-char-gate-") as temp_dir:
+            source_path = Path(temp_dir) / "source.txt"
+            source_path.write_text("ⓚ1화\n" + ("가 " * 2100) + "\n", encoding="utf-8")
+
+            inspection = inspect_text(source_path)
+
+            self.assertGreaterEqual(inspection.chapter_chars["001"], inspection.minimum_chapter_chars)
+            self.assertEqual({}, inspection.under_min_chapter_chars)
+            self.assertLess(inspection.chapter_chars_no_space["001"], inspection.minimum_chapter_chars_no_space)
+            self.assertIn("001", inspection.under_min_chapter_chars_no_space)
+
+    def test_chapter_length_flags_ignore_legacy_no_space_shortfall(self) -> None:
+        flags = build_chapter_length_flags(
+            [
+                {
+                    "episode": "1",
+                    "chars": 4201,
+                    "chars_no_space": 2101,
+                }
+            ]
+        )
+
+        self.assertEqual([], flags)
+
+    def test_manuscript_format_policy_flags_heading_quotes_and_spacing(self) -> None:
+        text = "\n".join(
+            [
+                "Episode 1. 제목",
+                "",
+                "지문",
+                "“대사”",
+                "",
+                "“대사2”",
+                "'속말'",
+                "끝...",
+            ]
+        )
+
+        flags = build_manuscript_format_flags(text)
+        subtypes = {str(row["subtype"]) for row in flags}
+
+        self.assertIn("chapter_heading_missing_k", subtypes)
+        self.assertIn("chapter_heading_blank_lines", subtypes)
+        self.assertIn("dialogue_narration_spacing", subtypes)
+        self.assertIn("straight_single_quote", subtypes)
+        self.assertIn("ascii_ellipsis", subtypes)
+
+    def test_manuscript_format_policy_accepts_canonical_spacing(self) -> None:
+        text = "\n".join(
+            [
+                "ⓚEpisode 1. 제목",
+                "",
+                "",
+                "",
+                "지문",
+                "지문2",
+                "",
+                "“대사”",
+                "“대사2”",
+                "",
+                "지문3",
+            ]
+        )
+
+        flags = build_manuscript_format_flags(text)
+        with tempfile.TemporaryDirectory(prefix="novel-qc-format-policy-") as temp_dir:
+            inspection_path = Path(temp_dir) / "clean.txt"
+            inspection_path.write_text(text, encoding="utf-8")
+            inspection = inspect_text(inspection_path)
+
+            self.assertEqual([], flags)
+            self.assertEqual(0, inspection.manuscript_format_violation_count)
+
+    def test_normalize_manuscript_format_applies_default_text_qc_rules(self) -> None:
+        text = "\n".join(
+            [
+                "Episode 1. 제목",
+                "",
+                "지문",
+                "",
+                "지문2",
+                "“대사”",
+                "",
+                "“대사2 with 'inner'... ”",
+                "",
+                "",
+                "지문3",
+            ]
+        )
+
+        normalized = normalize_manuscript_format(text)
+
+        self.assertIn("ⓚEpisode 1. 제목\n\n\n\n지문\n지문2\n\n“대사”\n“대사2 with ‘inner’… ”\n\n지문3\n", normalized)
+        self.assertEqual([], build_manuscript_format_flags(normalized))
+
     def test_final_delivery_package_defaults_to_txt_and_human_html(self) -> None:
         with tempfile.TemporaryDirectory(prefix="novel-qc-final-delivery-") as temp_dir:
             run_root = Path(temp_dir)

@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 
-MIN_CHAPTER_CHARS_NO_SPACE = 4000
+MIN_CHAPTER_CHARS = 4000
+MIN_CHAPTER_CHARS_NO_SPACE = MIN_CHAPTER_CHARS
 
 
 def utc_now_iso() -> str:
@@ -66,9 +67,19 @@ class TextInspection:
     stage_cue_candidates: int
     stage_cues_allowed_by_narrative_context: int
     chapter_count: int
+    minimum_chapter_chars: int
+    chapter_chars: dict[str, int]
+    under_min_chapter_chars: dict[str, int]
     minimum_chapter_chars_no_space: int
     chapter_chars_no_space: dict[str, int]
     under_min_chapter_chars_no_space: dict[str, int]
+    straight_double_quote_count: int = 0
+    straight_single_quote_count: int = 0
+    ascii_ellipsis_count: int = 0
+    chapter_heading_without_k_count: int = 0
+    chapter_heading_spacing_violation_count: int = 0
+    dialogue_narration_spacing_violation_count: int = 0
+    manuscript_format_violation_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

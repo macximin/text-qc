@@ -26,7 +26,7 @@ Run: `{{run_id}}`
 ## 적용 전 체크
 
 - `llm-facing/consistency_report.md`에서 편집 가능 항목으로 분리되었는가:
-- 회차별 공백 제외 {{minimum_chapter_chars_no_space}}자 기준을 해치지 않는가:
+- 회차별 공백 포함 {{minimum_chapter_chars}}자 기준을 해치지 않는가:
 - 중복 회차의 정본 선택이 닫혔는가:
 - 문맥형 오타는 앞뒤 문맥 근거가 있는가:
 - `changes.json`이 `validate-changes`를 통과했는가:

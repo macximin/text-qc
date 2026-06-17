@@ -647,6 +647,11 @@ def intake_manuscript(
         "char_count": inspection.char_count,
         "chars_no_space": inspection.chars_no_space,
         "chapter_count": inspection.chapter_count,
+        "minimum_chapter_chars": inspection.minimum_chapter_chars,
+        "under_min_chapter_chars_summary": format_chapter_length_summary(
+            inspection.chapter_chars,
+            minimum=inspection.minimum_chapter_chars,
+        ),
         "minimum_chapter_chars_no_space": inspection.minimum_chapter_chars_no_space,
         "under_min_chapter_chars_no_space_summary": format_chapter_length_summary(
             inspection.chapter_chars_no_space,

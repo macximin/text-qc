@@ -32,7 +32,7 @@
 - `corrections/editorial_diff.md`: 편집자 모드 텍스트 적용 diff.
 - `corrections/change_contexts.md`: 문맥형 오타/변경 후보의 주변 문맥.
 - `final_manuscript/final_manuscript.txt`: 최종 원고 후보.
-- `evidence/review/chapter_length_flags.jsonl`: 공백 제외 4000자 미만 회차 후보.
+- `evidence/review/chapter_length_flags.jsonl`: 공백 포함 4000자 미만 회차 후보.
 
 ## 금지
 
@@ -53,7 +53,7 @@
 - 하네스 계약 변경 뒤 하네스 자체 적대감리를 생략.
 - 세계관 전제/장르적 허세로 방어된 항목을 P0/P1 확정 충돌처럼 제출.
 - 정본 선택 전 비동일 중복 회차를 확정 삭제.
-- 삭제 후 남는 회차가 공백 제외 4000자 미만인데도 정본 삭제를 확정.
+- 삭제 후 남는 회차가 공백 포함 4000자 미만인데도 정본 삭제를 확정.
 - 교정 후 재평가 없이 최종 보고서에 해결 완료라고 작성.
 
 ## 완료 조건
@@ -73,7 +73,7 @@
 - `changes.json`의 적극 편집 후보가 replace/delete/insert_before/insert_after 중 하나로 구조화되어 있다.
 - 적극 편집 후보는 `episode_deep_dive.md`와 `consistency_report.md`의 근거를 참조한다.
 - `consistency_report.md`의 편집자 모드 진입 가능 여부가 `가능`으로 바뀌어 있다.
-- 공백 제외 4000자 미만 회차는 결락/중복/분할 오류 여부가 닫혀 있다.
+- 공백 포함 4000자 미만 회차는 결락/중복/분할 오류 여부가 닫혀 있다.
 - `consistency_correction_loop.md`에 각 iteration의 해결/신규/회귀/잔여 리스크가 남아 있다.
 - 최종 개선 보고서는 Before/After, 개선 근거, 잔여 리스크를 축별로 분리하고, 납품 대상으로 쓰기 전 `validate-report --report`로 별도 검증한다.
 - `edit_class=contextual_typo` 항목은 reading_basis와 앞뒤 문맥 근거를 갖춘다.

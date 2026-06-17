@@ -8,12 +8,12 @@ Run: `{{run_id}}`
 - 상태: 작성 필요
 - 편집자 모드 진입 가능 여부: 불가
 - 보류 이유: 화별 수동 딥다이브와 정합성 판정 작성 전입니다.
-- 회차 최소 기준: 공백 제외 {{minimum_chapter_chars_no_space}}자
-- 기준 미달 회차: {{under_min_chapter_chars_no_space_summary}}
+- 회차 최소 기준: 공백 포함 {{minimum_chapter_chars}}자
+- 기준 미달 회차: {{under_min_chapter_chars_summary}}
 
 ## 회차 분량 판정
 
-| 위치 | 공백 제외 글자수 | 판정 | 편집 방향 |
+| 위치 | 공백 포함 글자수 | 판정 | 편집 방향 |
 |---|---:|---|---|
 
 ## 확정 이슈

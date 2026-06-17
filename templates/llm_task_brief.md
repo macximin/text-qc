@@ -48,7 +48,8 @@ Gate profile: `{{gate_profile}}` / `{{gate_profile_label}}`
 - 검수와 교정을 분리한다.
 - 내부 분석은 `llm-facing/`에 둔다.
 - 기호는 보존하고, 삭제가 필요하면 먼저 정합성 근거를 남긴다.
-- 회차별 공백 제외 글자수는 `{{minimum_chapter_chars_no_space}}`자 이상을 강한 원칙으로 본다.
+- 송고 기본 형식은 소제목/회차 제목 앞 `ⓚ`, 제목 아래 빈 줄 3줄, 대사-대사 붙임, 지문-지문 붙임, 대사와 지문 사이 빈 줄 1줄, 곡선 따옴표 `“”`/`‘’`입니다.
+- 회차별 공백 포함 글자수는 `{{minimum_chapter_chars}}`자 이상을 강한 원칙으로 본다.
 - 소제목은 무단 수정하지 않는다. 유무가 불균형하면 더 적은 쪽에 `ⓐⓐ(의견: ...)`으로 삭제 후보 또는 기존 소제목과 유사한 추가 후보를 남긴다.
 - 정합성 평가는 교정 전후에 반복한다. 각 반복은 `llm-facing/consistency_correction_loop.md`에 남긴다.
 - 작가/편집자에게 보여줄 보고서는 `human-facing/1차_one_page_report.md`를 1차 SSOT로 유지한다. n차 갱신은 `N차_one_page_report.md`로 만들고, 구형 `one_page_report.md`는 만들지 않는다.
@@ -161,7 +162,7 @@ HWP 계열, AI 작성 의심, glossary 미정렬, 중복/화수 이상 가능성
 - 전체 글자 수: {{char_count}}
 - 공백 제외 글자 수: {{chars_no_space}}
 - 회차 수: {{chapter_count}}
-- 회차 최소 기준: 공백 제외 {{minimum_chapter_chars_no_space}}자
-- 기준 미달 회차: {{under_min_chapter_chars_no_space_summary}}
+- 회차 최소 기준: 공백 포함 {{minimum_chapter_chars}}자
+- 기준 미달 회차: {{under_min_chapter_chars_summary}}
 - 120자 이상 줄: {{long_lines_120}}
 - 200자 이상 줄: {{long_lines_200}}

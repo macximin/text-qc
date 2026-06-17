@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import MIN_CHAPTER_CHARS_NO_SPACE
+from .models import MIN_CHAPTER_CHARS, MIN_CHAPTER_CHARS_NO_SPACE
 from .narrative import classify_bracketed_line
 from .protocol import (
     HARD_CARRYOVER_KINDS,
@@ -22,7 +22,15 @@ from .submission import validate_manual_review_submission, workflow_blockers_fro
 from .subtitles import build_subtitle_consistency_flags, extract_chapter_subtitle_rows
 from .typography import ASCII_ELLIPSIS_RE, count_style_single_quotes, normalize_straight_quotes
 from .verisimilitude import extract_verisimilitude_candidates
-from .workspace import find_chapter_markers, inspect_text, read_json, read_text_auto, write_json, write_jsonl
+from .workspace import (
+    build_manuscript_format_flags,
+    find_chapter_markers,
+    inspect_text,
+    read_json,
+    read_text_auto,
+    write_json,
+    write_jsonl,
+)
 
 
 AI_SLOP_TERMS = (
@@ -222,6 +230,7 @@ class AnalysisResult:
     timeline_summary_path: str
     character_title_matrix_path: str
     verisimilitude_candidates_path: str
+    manuscript_format_flags_path: str
     hygiene_flags_path: str
     narrative_allowances_path: str
     ai_slop_path: str
@@ -325,6 +334,9 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
     verisimilitude_candidates_path = review_dir / "verisimilitude_candidates.jsonl"
     write_jsonl(verisimilitude_candidates_path, extract_verisimilitude_candidates(chapters))
 
+    manuscript_format_flags_path = review_dir / "manuscript_format_flags.jsonl"
+    write_jsonl(manuscript_format_flags_path, build_manuscript_format_flags(text))
+
     hygiene_flags_path = review_dir / "hygiene_flags.jsonl"
     write_jsonl(hygiene_flags_path, extract_hygiene_flags(chapters))
     narrative_allowances_path = review_dir / "narrative_allowances.jsonl"
@@ -354,6 +366,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         build_submission_gate(
             inspection=inspection.to_dict(),
             verisimilitude_candidates_path=verisimilitude_candidates_path,
+            manuscript_format_flags_path=manuscript_format_flags_path,
             hygiene_flags_path=hygiene_flags_path,
             narrative_allowances_path=narrative_allowances_path,
             replay_candidates_path=replay_candidates_path,
@@ -394,6 +407,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
             "timeline_summary_path": str(timeline_summary_path),
             "character_title_matrix_path": str(character_title_matrix_path),
             "verisimilitude_candidates_path": str(verisimilitude_candidates_path),
+            "manuscript_format_flags_path": str(manuscript_format_flags_path),
             "hygiene_flags_path": str(hygiene_flags_path),
             "narrative_allowances_path": str(narrative_allowances_path),
             "ai_slop_path": str(ai_slop_path),
@@ -436,6 +450,7 @@ def analyze_run(*, run_root: Path) -> AnalysisResult:
         timeline_summary_path=str(timeline_summary_path),
         character_title_matrix_path=str(character_title_matrix_path),
         verisimilitude_candidates_path=str(verisimilitude_candidates_path),
+        manuscript_format_flags_path=str(manuscript_format_flags_path),
         hygiene_flags_path=str(hygiene_flags_path),
         narrative_allowances_path=str(narrative_allowances_path),
         ai_slop_path=str(ai_slop_path),
@@ -531,13 +546,17 @@ def build_chapter_metrics(chapters: list[dict[str, Any]]) -> list[dict[str, Any]
     rows = []
     for chapter in chapters:
         body = str(chapter["text"])
+        chars = len(body)
         chars_no_space = len(re.sub(r"\s+", "", body))
         lines = body.splitlines()
         nonempty = [line for line in lines if line.strip()]
         rows.append(
             {
                 "episode": chapter["episode"],
-                "chars": len(body),
+                "chars": chars,
+                "minimum_chars": MIN_CHAPTER_CHARS,
+                "meets_minimum_chars": chars >= MIN_CHAPTER_CHARS,
+                "under_minimum_chars_by": max(0, MIN_CHAPTER_CHARS - chars),
                 "chars_no_space": chars_no_space,
                 "minimum_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE,
                 "meets_minimum_chars_no_space": chars_no_space >= MIN_CHAPTER_CHARS_NO_SPACE,
@@ -559,19 +578,26 @@ def build_chapter_metrics(chapters: list[dict[str, Any]]) -> list[dict[str, Any]
 def build_chapter_length_flags(chapter_metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for metric in chapter_metrics:
-        chars_no_space = int(metric.get("chars_no_space") or 0)
-        if chars_no_space >= MIN_CHAPTER_CHARS_NO_SPACE:
+        chars = int(metric.get("chars") or 0)
+        if chars >= MIN_CHAPTER_CHARS:
             continue
+        chars_no_space = int(metric.get("chars_no_space") or 0)
         rows.append(
             {
                 "kind": "chapter_under_minimum_chars",
                 "episode": metric.get("episode", ""),
+                "chars": chars,
+                "minimum_chars": MIN_CHAPTER_CHARS,
+                "deficit_chars": MIN_CHAPTER_CHARS - chars,
                 "chars_no_space": chars_no_space,
                 "minimum_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE,
-                "deficit_chars_no_space": MIN_CHAPTER_CHARS_NO_SPACE - chars_no_space,
+                "deficit_chars_no_space": max(
+                    0,
+                    MIN_CHAPTER_CHARS_NO_SPACE - chars_no_space,
+                ),
                 "severity": "P1",
                 "review_hint": (
-                    "회차 정본 후보는 공백 제외 4000자 이상을 원칙으로 합니다. "
+                    "회차 정본 후보는 공백 포함 4000자 이상을 원칙으로 합니다. "
                     "중복 회차 삭제나 정본 선택 전 분량과 앞뒤 정합성을 함께 확인합니다."
                 ),
             }
@@ -1373,6 +1399,7 @@ def build_submission_gate(
     *,
     inspection: dict[str, Any],
     verisimilitude_candidates_path: Path,
+    manuscript_format_flags_path: Path,
     hygiene_flags_path: Path,
     narrative_allowances_path: Path,
     replay_candidates_path: Path,
@@ -1389,6 +1416,7 @@ def build_submission_gate(
     gate_profile = normalize_gate_profile(gate_profile)
     require_delivery_report = bool(gate_profile_definition(gate_profile).get("require_delivery_report"))
     verisimilitude_summary = summarize_verisimilitude_candidates(verisimilitude_candidates_path)
+    manuscript_format_flag_count = count_jsonl_rows(manuscript_format_flags_path)
     hygiene_count = count_jsonl_rows(hygiene_flags_path)
     narrative_allowance_count = count_jsonl_rows(narrative_allowances_path)
     replay_count = count_jsonl_rows(replay_candidates_path)
@@ -1402,9 +1430,11 @@ def build_submission_gate(
     blockers = []
     if int(inspection.get("stage_cues") or 0) > 0:
         blockers.append("stage_cues_present")
+    if manuscript_format_flag_count > 0 or int(inspection.get("manuscript_format_violation_count") or 0) > 0:
+        blockers.append("manuscript_format_policy_violations")
     if hygiene_count > 0:
         blockers.append("hygiene_flags_present")
-    if chapter_length_flag_count > 0 or inspection.get("under_min_chapter_chars_no_space"):
+    if chapter_length_flag_count > 0 or inspection.get("under_min_chapter_chars"):
         blockers.append("chapter_under_minimum_chars")
     manual_ready = False
     manual_review: dict[str, Any] | None = None
@@ -1453,6 +1483,16 @@ def build_submission_gate(
         "verisimilitude_candidate_count": verisimilitude_summary["total_count"],
         "verisimilitude_conflict_candidate_count": verisimilitude_summary["conflict_count"],
         "verisimilitude_checkpoint_count": verisimilitude_summary["checkpoint_count"],
+        "manuscript_format_flag_count": manuscript_format_flag_count,
+        "manuscript_format_policy": {
+            "chapter_heading_marker": "소제목/회차 제목 앞에는 `ⓚ`를 붙입니다.",
+            "chapter_heading_blank_lines": "제목 아래에는 빈 줄 3줄을 유지합니다.",
+            "dialogue_spacing": (
+                "대사-대사는 붙이고 지문-지문은 붙이며, 대사와 지문 사이에는 빈 줄 1줄을 둡니다."
+            ),
+            "quote_style": "직선 따옴표 `\"\"`/`''` 대신 곡선 따옴표 `“”`/`‘’`를 씁니다.",
+            "ascii_ellipsis": "ASCII `...` 대신 전각 말줄임표 `…`를 씁니다.",
+        },
         "hygiene_flag_count": hygiene_count,
         "narrative_allowance_count": narrative_allowance_count,
         "stage_cue_candidates": inspection.get("stage_cue_candidates", 0),
@@ -1482,6 +1522,14 @@ def build_submission_gate(
             )
         },
         "chapter_length_policy": {
+            "minimum_chars": inspection.get(
+                "minimum_chapter_chars",
+                MIN_CHAPTER_CHARS,
+            ),
+            "under_min_chapter_chars": inspection.get(
+                "under_min_chapter_chars",
+                {},
+            ),
             "minimum_chars_no_space": inspection.get(
                 "minimum_chapter_chars_no_space",
                 MIN_CHAPTER_CHARS_NO_SPACE,
@@ -1490,7 +1538,7 @@ def build_submission_gate(
                 "under_min_chapter_chars_no_space",
                 {},
             ),
-            "rule": "회차별 공백 제외 글자수는 4000자 이상을 원칙으로 합니다.",
+            "rule": "회차별 공백 포함 글자수는 4000자 이상을 원칙으로 합니다.",
         },
         "era_candidate_count": era_count,
         "ai_slop": {

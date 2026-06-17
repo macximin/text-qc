@@ -9,8 +9,8 @@ Run: `{{run_id}}`
 - 기준: `llm-facing/episode_deep_dive_brief.md`
 - 원칙: 기호 보존, 수동 맥락 독해, 자동 evidence 후보화
 - 판정: 세계관 전제/장르적 허세/수정 가능 충돌/hard carryover를 분리
-- 회차 최소 기준: 공백 제외 {{minimum_chapter_chars_no_space}}자
-- 기준 미달 회차: {{under_min_chapter_chars_no_space_summary}}
+- 회차 최소 기준: 공백 포함 {{minimum_chapter_chars}}자
+- 기준 미달 회차: {{under_min_chapter_chars_summary}}
 
 ## 우선 확인 회차
 
@@ -22,7 +22,7 @@ Run: `{{run_id}}`
 ## EP 000
 
 - 읽은 범위:
-- 공백 제외 글자수:
+- 공백 포함 글자수:
 - 사건 spine:
 - 인물/정보 상태:
 - 시간/장소 상태:
